@@ -11,5 +11,4 @@ gradio
 toml
 beautifulsoup4
 lxml
-hashlib3>=1.0.0
 pycryptodome>=3.19.0 
