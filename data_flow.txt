@@ -1,0 +1,168 @@
+Customer Segmentation Analysis - Data Flow Documentation
+=================================================
+
+1. Data Generation and Initial Storage
+-----------------------------------
+Step 1: Generate Raw Datasets
+Input: None (Data generation functions)
+Process: Generate synthetic data using Faker and random distributions
+Outputs:
+- st.session_state.original_behavioral_data: Raw behavioral dataset
+  * Features: customer_id, email, total_spent, total_orders, avg_order_value, last_purchase_days_ago, categories_bought, brands_bought
+  * Contains deliberate errors for testing
+- st.session_state.original_preference_data: Raw preference dataset
+  * Features: customer_id, top_category, top_brand, price_preference_range, discount_sensitivity, luxury_preference_score
+- st.session_state.original_inventory_data: Raw inventory dataset
+  * Features: product_id, product_name, category, brand, stock_quantity, retail_price, cost_price, profit_margin
+
+2. Data Processing Pipeline
+-------------------------
+Step 2: Data Consistency Check
+Input: st.session_state.original_behavioral_data
+Process: Check for invalid emails, missing values, negative values
+Output: 
+- st.session_state.clean_behavioral_data: Cleaned behavioral data with problematic rows removed
+
+Step 3: Data Privacy Implementation
+Input: st.session_state.clean_behavioral_data
+Process: Remove sensitive information (email addresses)
+Output: 
+- st.session_state.anonymized_behavioral_data: Privacy-compliant behavioral data
+
+Step 4: String to Numeric Conversion
+Input: st.session_state.original_preference_data
+Process: Convert categorical values to numeric using mapping dictionaries
+Outputs:
+- st.session_state.numeric_preference_data: Preference data with numeric categories
+- st.session_state.category_mapping: Category name to ID mapping
+- st.session_state.brand_mapping: Brand name to ID mapping
+
+Step 5: Data Combination
+Inputs: 
+- st.session_state.anonymized_behavioral_data
+- st.session_state.numeric_preference_data
+Process: Merge datasets on customer_id
+Output: 
+- st.session_state.combined_raw_data: Combined behavioral and preference data
+
+Step 6: Data Normalization
+Input: st.session_state.combined_raw_data
+Process: StandardScaler normalization of numeric features
+Output: 
+- st.session_state.normalized_kmeans_data: Normalized data ready for clustering
+Features normalized:
+- price_preference_range
+- discount_sensitivity
+- luxury_preference_score
+- total_spent
+- total_orders
+- avg_order_value
+- last_purchase_days_ago
+- categories_bought
+- brands_bought
+
+3. Clustering Process
+-------------------
+Step 1: Determine Optimal Number of Clusters
+Input: st.session_state.normalized_kmeans_data
+Process: 
+- Calculate inertia values and silhouette scores for k=1 to k=10
+- Get AI recommendation for optimal k
+Output: 
+- st.session_state.optimal_k (selected number of clusters)
+- st.session_state.clustering_analysis (AI analysis of optimal k)
+
+Step 2: K-means Clustering
+Input: st.session_state.normalized_kmeans_data (excluding customer_id)
+Process:
+- Initialize KMeans with optimal_k clusters
+- Fit model to normalized data
+Output:
+- st.session_state.clustered_data (normalized data with cluster assignments)
+- st.session_state.final_clustered_data (original data with cluster assignments)
+
+Step 3: Cluster Validation
+Input: st.session_state.clustered_data
+Process:
+- Calculate inter-cluster distances
+- Generate distance matrix visualization
+- Get AI evaluation of cluster quality
+Output:
+- Distance matrix plot
+- st.session_state.cluster_validation (AI analysis of cluster quality)
+
+Step 4: Cluster Naming
+Input: st.session_state.final_clustered_data
+Process:
+- Generate cluster statistics for each cluster
+- Get AI suggestions for cluster names and explanations
+- Allow manual editing of names and explanations
+Output:
+- st.session_state.cluster_names (AI suggestions)
+- st.session_state.final_named_clusters (final dataset with cluster names and explanations)
+
+4. Dataset Column Order
+----------------------
+Original Behavioral Data:
+1. customer_id
+2. email
+3. total_spent
+4. total_orders
+5. avg_order_value
+6. last_purchase_days_ago
+7. categories_bought
+8. brands_bought
+
+Original Preference Data:
+1. customer_id
+2. top_category
+3. top_brand
+4. price_preference_range
+5. discount_sensitivity
+6. luxury_preference_score
+
+Final Named Clusters Data:
+1. customer_id
+2. cluster
+3. cluster_name
+4. email
+5. total_spent
+6. total_orders
+7. avg_order_value
+8. last_purchase_days_ago
+9. categories_bought
+10. brands_bought
+11. top_category
+12. top_brand
+13. price_preference_range
+14. discount_sensitivity
+15. luxury_preference_score
+16. cluster_explanation
+
+5. Key Variables Summary
+----------------------
+Raw Data:
+- st.session_state.original_behavioral_data: Raw behavioral dataset
+- st.session_state.original_preference_data: Raw preference dataset
+- st.session_state.original_inventory_data: Raw inventory dataset
+
+Processing Variables:
+- st.session_state.clean_behavioral_data: Cleaned behavioral data
+- st.session_state.anonymized_behavioral_data: Data with removed emails
+- st.session_state.numeric_preference_data: Preference data with numeric values
+- st.session_state.combined_raw_data: Merged behavioral and preference data
+- st.session_state.normalized_kmeans_data: Normalized data for clustering
+
+Clustering Results:
+- st.session_state.clustered_data: Normalized data with cluster assignments
+- st.session_state.final_clustered_data: Original data with cluster assignments
+- st.session_state.cluster_names: AI-suggested names and explanations
+- st.session_state.final_named_clusters: Final dataset with cluster names
+
+6. Notes
+--------
+- All variables follow st.session_state.{name} convention
+- Each step preserves original data while creating transformed versions
+- Clustering uses only numeric features, excluding customer_id
+- Final datasets maintain data lineage from raw to clustered results
+- Toggle switches in UI remember their state between clustering updates 
