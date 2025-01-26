@@ -99,15 +99,10 @@ if 'go_to_data' in st.session_state and st.session_state['go_to_data']:
     st.session_state['go_to_data'] = False
     st.session_state.menu_selection = "Data"
 
-# Handle navigation to Inventory & Customer Selection
+# Handle navigation to Inventory Selection
 if 'go_to_inventory' in st.session_state and st.session_state['go_to_inventory']:
     st.session_state['go_to_inventory'] = False
-    st.session_state.menu_selection = "Inventory & Customer Selection"
-
-# Handle navigation to Email Design
-if 'go_to_email' in st.session_state and st.session_state['go_to_email']:
-    st.session_state['go_to_email'] = False
-    st.session_state.menu_selection = "Email Design"
+    st.session_state.menu_selection = "Inventory Selection"
 
 # Load config file
 try:
@@ -122,7 +117,7 @@ if 'menu_selection' not in st.session_state:
 
 menu_selection = st.sidebar.radio(
     "Navigation",
-    ["Instructions", "Data", "Clustering", "Inventory & Customer Selection", "Email Design"],
+    ["Instructions", "Data", "Clustering", "Inventory Selection", "Email Design"],
     key="menu_selection"
 )
 
@@ -716,7 +711,7 @@ elif menu_selection == "Clustering":
                 <div style='text-align: center; padding: 2rem; margin: 2rem 0; background-color: #1a1a1a; border-radius: 10px; border: 1px solid #333;'>
                     <h2 style='color: #00cc00; margin-bottom: 1rem;'>✅ Clustering Analysis Complete</h2>
                     <p style='color: #ffffff; font-size: 1.2rem; margin-bottom: 1.5rem;'>
-                        Customer segmentation is now complete with named clusters. You can proceed to inventory and customer selection.
+                        Customer segmentation is now complete with named clusters. You can proceed to inventory selection.
                     </p>
                 </div>
             """, unsafe_allow_html=True)
@@ -724,12 +719,12 @@ elif menu_selection == "Clustering":
             # Navigation button
             col1, col2, col3 = st.columns([2, 1, 2])
             with col2:
-                if st.button("Continue to Inventory & Customer Selection ➡️", type="primary", use_container_width=True):
+                if st.button("Continue to Inventory Selection ➡️", type="primary", use_container_width=True):
                     st.session_state['go_to_inventory'] = True
                     st.rerun()
 
-elif menu_selection == "Inventory & Customer Selection":
-    st.title("📦 Inventory & Customer Selection")
+elif menu_selection == "Inventory Selection":
+    st.title("📦 Inventory Selection")
     
     # Filter and Sort section
     with st.expander("🔍 Filter and Sort Products", expanded=True):
