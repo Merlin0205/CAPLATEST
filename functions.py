@@ -44,13 +44,22 @@ client = None
 def get_openai_client():
     """Gets or creates OpenAI client with current API key."""
     global client
-    if client is None and "openai_api_key" in st.session_state and st.session_state.openai_api_key:
-        try:
-            client = OpenAI(api_key=st.session_state.openai_api_key)
-        except Exception as e:
-            st.error(f"Error initializing OpenAI client: {str(e)}")
-            return None
-    return client
+    try:
+        # First try to get API key from session state
+        api_key = st.session_state.get("openai_api_key")
+        
+        # If not in session state, try to get from environment/secrets
+        if not api_key:
+            api_key = st.secrets.get("OPENAI_API_KEY")
+        
+        # If we have an API key and client is not initialized
+        if api_key and (client is None or client.api_key != api_key):
+            client = OpenAI(api_key=api_key)
+            
+        return client
+    except Exception as e:
+        st.error(f"Error initializing OpenAI client: {str(e)}")
+        return None
 
 def generate_behavioral_data(num_customers=2000):
     """

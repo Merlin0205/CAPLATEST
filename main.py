@@ -21,7 +21,7 @@ def check_password():
                 api_key = get_api_key(st.session_state["password"])
                 if api_key:
                     st.session_state["password_correct"] = True
-                    st.session_state["openai_api_key"] = api_key
+                    st.session_state["openai_api_key"] = api_key or st.secrets.get("OPENAI_API_KEY")
                     del st.session_state["password"]  # Delete password from session state
                     st.success("✅ Login successful! Application is starting...")
                 else:
