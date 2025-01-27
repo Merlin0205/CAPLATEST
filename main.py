@@ -81,7 +81,9 @@ from functions import (
     get_cluster_names_from_ai,
     create_named_clustered_dataset,
     select_best_segment,
-    select_best_customers
+    select_best_customers,
+    generate_promotional_email,
+    send_promotional_email
 )
 import toml
 from components.section import create_section
@@ -360,6 +362,11 @@ elif menu_selection == "Data":
 elif menu_selection == "Clustering":
     st.title("🎯 Customer Clustering")
     
+    # Check if data section is completed
+    if "normalized_kmeans_data" not in st.session_state:
+        st.warning("⚠️ Před pokračováním musíte dokončit sekci DATA.")
+        st.stop()
+
     # Step 1: Determine Optimal Number of Clusters
     with st.expander("1️⃣ Determine the optimal number of clusters", expanded=True):
         st.markdown('<p class="big-header">Determine Optimal Number of Clusters</p>', unsafe_allow_html=True)
@@ -735,6 +742,11 @@ elif menu_selection == "Clustering":
 elif menu_selection == "Inventory & Customer Selection":
     st.title("📦 Inventory & Customer Selection")
     
+    # Check if clustering section is completed
+    if "final_named_clusters" not in st.session_state:
+        st.warning("⚠️ Před pokračováním musíte dokončit sekci CLUSTERING.")
+        st.stop()
+
     # Filter and Sort section
     with st.expander("🔍 Filter and Sort Products", expanded=True):
         st.markdown('<p class="big-header">Filter and Sort Products</p>', unsafe_allow_html=True)
@@ -801,17 +813,41 @@ elif menu_selection == "Inventory & Customer Selection":
     with st.expander("🎯 Select Product for Promotion", expanded=True):
         st.markdown('<p class="big-header">Select Product for Promotion</p>', unsafe_allow_html=True)
         
-        # Let user select a product
+        # Initialize selected product option if not exists
+        if 'selected_product_option' not in st.session_state:
+            st.session_state.selected_product_option = None
+
+        product_options = [""] + [
+            f"{row['product_name']} | {row['category']} | ${row['retail_price']:.2f} | Margin: {row['profit_margin']:.1f}% | Stock: {row['stock_quantity']}"
+            for _, row in filtered_df.iterrows()
+        ]
+
+        # Find index of selected product, default to 0 if not found
+        try:
+            selected_index = product_options.index(st.session_state.selected_product_option) if st.session_state.selected_product_option else 0
+        except ValueError:
+            selected_index = 0
+            st.session_state.selected_product_option = None
+
+        # Product selection
         selected_product = st.selectbox(
             "Select a product to promote:",
-            options=[""] + [
-                f"{row['product_name']} | {row['category']} | ${row['retail_price']:.2f} | Margin: {row['profit_margin']:.1f}% | Stock: {row['stock_quantity']}"
-                for _, row in filtered_df.iterrows()
-            ],
-            key="selected_product"
+            options=product_options,
+            key="selected_product",
+            index=selected_index
         )
-        
+
+        # Update selected product option
+        st.session_state.selected_product_option = selected_product
+
         if selected_product:
+            # Check if product changed and reset email if needed
+            if ('last_selected_product' not in st.session_state or 
+                st.session_state.last_selected_product != selected_product):
+                if 'email_content' in st.session_state:
+                    del st.session_state.email_content
+                st.session_state.last_selected_product = selected_product
+
             # Extract product name from the selection
             selected_product_name = selected_product.split(" | ")[0]
             # Store selected product info in session state
@@ -952,6 +988,13 @@ elif menu_selection == "Inventory & Customer Selection":
                 # Get selected customer details
                 best_customer = next(c for c in top_customers if str(c['customer_id']) == selected_customer_id.split()[1])
                 
+                # Check if customer changed and reset email if needed
+                if ('last_selected_customer' not in st.session_state or 
+                    st.session_state.last_selected_customer != best_customer['customer_id']):
+                    if 'email_content' in st.session_state:
+                        del st.session_state.email_content
+                    st.session_state.last_selected_customer = best_customer['customer_id']
+
                 # Display selected customer
                 col1, col2 = st.columns(2)
                 with col1:
@@ -973,6 +1016,7 @@ elif menu_selection == "Inventory & Customer Selection":
                     - Favorite Brand: {best_customer['data']['top_brand']}
                     - Favorite Category: {best_customer['data']['top_category']}
                     - Last Purchase: {best_customer['data']['last_purchase_days_ago']} days ago
+                    - Email: {best_customer['data']['email']}
                     """)
                 
                 # Store complete promotion information in session state
@@ -983,6 +1027,7 @@ elif menu_selection == "Inventory & Customer Selection":
                         'customer_id': best_customer['customer_id'],
                         'match_score': best_customer['score'],
                         'profile': {
+                            'email': best_customer['data']['email'],
                             'total_spent': best_customer['data']['total_spent'],
                             'avg_order_value': best_customer['data']['avg_order_value'],
                             'top_brand': best_customer['data']['top_brand'],
@@ -1013,181 +1058,127 @@ elif menu_selection == "Inventory & Customer Selection":
 elif menu_selection == "Email Design":
     st.title("✉️ Email Campaign Design")
     
-    # AI Email Generation section
-    with st.expander("✨ AI Email Generation", expanded=True):
-        if 'promotion_campaign' not in st.session_state:
-            st.warning("⚠️ Nejdříve prosím dokončete výběr produktu a zákazníka.")
-            st.stop()
-        
-        # Get data from session state
-        campaign = st.session_state.promotion_campaign
-        product = campaign['product']
-        customer = campaign['selected_customer']
-        segment = campaign['target_segment']
-        
-        # Show input data for AI
-        st.markdown("### 📋 Informace pro generování emailu")
+    # Check if inventory section is completed
+    if "promotion_campaign" not in st.session_state:
+        st.warning("⚠️ Před pokračováním musíte dokončit sekci INVENTORY & CUSTOMER SELECTION.")
+        st.stop()
+
+    # Get data from session state
+    campaign = st.session_state.promotion_campaign
+    product = campaign['product']
+    customer = campaign['selected_customer']
+    segment = campaign['target_segment']
+    
+    # 1. Email Data Section
+    with st.expander("📋 Email Data", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
-            st.write("**Informace o produktu:**")
-            st.write(f"- Název: {product['product_name']}")
-            st.write(f"- Značka: {product['brand']}")
-            st.write(f"- Kategorie: {product['category']}")
-            st.write(f"- Původní cena: ${product['original_price']:.2f}")
-            st.write(f"- Sleva: {product['discount_percent']}%")
-            st.write(f"- Konečná cena: ${product['discounted_price']:.2f}")
+            st.write("**Product Information:**")
+            st.write(f"- Name: {product['product_name']}")
+            st.write(f"- Brand: {product['brand']}")
+            st.write(f"- Category: {product['category']}")
+            st.write(f"- Original Price: ${product['original_price']:.2f}")
+            st.write(f"- Discount: {product['discount_percent']}%")
+            st.write(f"- Final Price: ${product['discounted_price']:.2f}")
         
         with col2:
-            st.write("**Informace o zákazníkovi:**")
-            st.write(f"- Segment: {segment['cluster_name']}")
-            st.write(f"- Oblíbená značka: {customer['profile']['top_brand']}")
-            st.write(f"- Oblíbená kategorie: {customer['profile']['top_category']}")
-            st.write(f"- Průměrná hodnota objednávky: ${customer['profile']['avg_order_value']:.2f}")
-            st.write(f"- Poslední nákup: před {customer['profile']['last_purchase_days_ago']} dny")
-        
-        st.markdown("---")
-
-        # AI Prompt for email generation
-        prompt = f"""Create a stunning, creative promotional email that focuses on the product and offer. Make it visually appealing and persuasive.
-
-Use these details to create the email:
-
-Product Details:
-- Name: {product['product_name']}
-- Brand: {product['brand']}
-- Category: {product['category']}
-- Original Price: ${product['original_price']:.2f}
-- Discount: {product['discount_percent']}%
-- Final Price: ${product['discounted_price']:.2f}
-
-Target Audience Preferences:
-- Preferred Brand: {customer['profile']['top_brand']}
-- Preferred Category: {customer['profile']['top_category']}
-- Average Purchase Value: ${customer['profile']['avg_order_value']:.2f}
-
-Requirements:
-1. Create a modern, visually stunning email design using HTML and inline CSS
-2. Use gradients, shadows, and modern typography
-3. Make it mobile-responsive
-4. Include a compelling subject line that creates urgency
-5. Highlight the exclusive discount
-6. Focus on product benefits and value
-7. Include a strong call-to-action button
-8. Add a professional footer
-9. Create a sense of urgency (4-day limited offer)
-10. DO NOT include any personal greetings or segment information
-
-Format the response as:
-SUBJECT: [Write a compelling subject line focusing on the offer]
-BODY: [Complete HTML email with inline styles]"""
-
-        # Button to generate email
-        if st.button("🎨 Vygenerovat kreativní email", type="primary"):
-            with st.spinner("🤖 AI vytváří váš personalizovaný email..."):
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a world-class email marketing designer and copywriter. Create stunning, highly personalized promotional emails that convert. Use modern design principles and persuasive writing techniques."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.9
+            st.write("**Customer Information:**")
+            st.write(f"- Customer ID: {customer['customer_id']}")
+            st.write(f"- Customer Email: {customer['profile']['email']}")
+            st.write(f"- Customer Segment: {segment['cluster_name']}")
+            st.write(f"- Favorite Brand: {customer['profile']['top_brand']}")
+            st.write(f"- Favorite Category: {customer['profile']['top_category']}")
+            st.write(f"- Average Order Value: ${customer['profile']['avg_order_value']:.2f}")
+            st.write(f"- Last Purchase: {customer['profile']['last_purchase_days_ago']} days ago")
+            st.write(f"- Discount Sensitivity: {customer['profile']['discount_sensitivity']}/10")
+    
+    # 2. AI Generation Section
+    with st.expander("🤖 AI Email Generation", expanded=True):
+        if st.button("🎨 Generate Creative Email", type="primary"):
+            with st.spinner("🤖 Generating your personalized email..."):
+                email_content = generate_promotional_email(
+                    client,
+                    product,
+                    customer,
+                    segment
                 )
-                
-                content = response.choices[0].message.content
-                subject = ""
-                body = ""
-                
-                for line in content.split('\n'):
-                    if line.startswith('SUBJECT:'):
-                        subject = line.replace('SUBJECT:', '').strip()
-                    elif line.startswith('BODY:'):
-                        body = content[content.index('BODY:') + 5:].strip()
-                
-                # Očistit HTML kód
-                body = body.strip('`').strip()
-                if body.startswith('```html'):
-                    body = body[7:].strip()
-                if body.endswith('```'):
-                    body = body[:-3].strip()
-                
-                st.session_state.email_content = {
-                    'subject': subject,
-                    'body': body
-                }
+                st.session_state.email_content = email_content
                 st.rerun()
-        
-        # Display preview if email is generated
+    
+    # 3. Email Preview Section
+    with st.expander("👀 Email Preview", expanded=True):
         if 'email_content' in st.session_state:
-            st.markdown("### 👀 Náhled emailu")
+            # CSS styles for email preview
             st.markdown("""
                 <style>
                     .email-container {
                         max-width: 800px;
-                        margin: 0 auto;
-                        background-color: #1a1a1a;
-                        padding: 20px;
-                        border-radius: 10px;
+                        margin: 0;
+                        padding: 0;
                     }
                     .email-subject {
-                        background-color: #f8f9fa;
+                        background-color: white;
                         padding: 15px;
-                        border-radius: 5px;
-                        margin: 0 0 20px 0;
+                        margin: 0;
                         font-weight: bold;
                         color: black;
-                        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                         text-align: center;
+                        border-bottom: 1px solid #eee;
                     }
                     .email-preview {
                         background-color: white;
-                        padding: 20px;
-                        border-radius: 10px;
                         margin: 0;
                         color: black;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                         font-family: Arial, sans-serif;
-                    }
-                    .email-preview img {
-                        max-width: 100%;
-                        height: auto;
-                        border-radius: 8px;
-                        margin: 10px 0;
-                    }
-                    .email-preview a {
-                        text-decoration: none;
-                        color: inherit;
-                    }
-                    .email-preview h1 {
-                        font-size: 32px;
-                        margin: 20px 0;
-                        font-weight: 300;
-                        color: #1a1a1a;
-                    }
-                    .email-preview h2 {
-                        font-size: 24px;
-                        margin: 15px 0;
-                        color: #1a1a1a;
-                    }
-                    .email-preview p {
-                        margin: 10px 0;
-                        line-height: 1.5;
-                    }
-                    .email-preview div {
-                        margin: 10px 0;
                     }
                 </style>
             """, unsafe_allow_html=True)
             
+            # Preview section
             st.markdown('<div class="email-container">', unsafe_allow_html=True)
-            st.markdown(f'<div class="email-subject">Předmět: {st.session_state.email_content["subject"]}</div>', unsafe_allow_html=True)
-            st.components.v1.html(st.session_state.email_content["body"], height=800, scrolling=True)
+            st.markdown(f'<div class="email-subject">Subject: {st.session_state.email_content["subject"]}</div>', unsafe_allow_html=True)
+            st.components.v1.html(st.session_state.email_content["body"], height=600, scrolling=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # Save button
-            if st.button("💾 Uložit email", type="primary"):
-                st.session_state.promotion_campaign['email'] = {
-                    'subject': st.session_state.email_content["subject"],
-                    'body': st.session_state.email_content["body"],
-                    'generated_at': pd.Timestamp.now().isoformat()
-                }
-                st.success("✅ Email byl úspěšně uložen!")
+            # Email sending section
+            st.info(f"""
+                **Demo Data Notice:**
+                The original customer email would be sent to: `{customer['profile']['email']}`
+                However, since this is a demo version, please enter your own email address for testing purposes.
+            """)
+            receiver_email = st.text_input("Enter your email address for demo:", key="receiver_email")
+            
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("📧 Send Email", type="primary"):
+                    if not receiver_email:
+                        st.error("⚠️ Please enter an email address.")
+                    else:
+                        # Load SMTP configuration
+                        email_config = {
+                            'smtp_server': config['email']['smtp_server'],
+                            'smtp_port': config['email']['smtp_port'],
+                            'sender_email': config['email']['sender_email']
+                        }
+                        
+                        # Send email
+                        success, message = send_promotional_email(
+                            email_config,
+                            st.session_state.email_content["subject"],
+                            st.session_state.email_content["body"],
+                            receiver_email
+                        )
+                        
+                        if success:
+                            st.success(message)
+                            if 'sent_emails' not in st.session_state.promotion_campaign:
+                                st.session_state.promotion_campaign['sent_emails'] = []
+                            st.session_state.promotion_campaign['sent_emails'].append({
+                                'recipient': receiver_email,
+                                'subject': st.session_state.email_content["subject"],
+                                'sent_at': pd.Timestamp.now().isoformat()
+                            })
+                        else:
+                            st.error(message)
+        else:
+            st.info("👆 Please generate an email first using the AI Email Generation section above.")

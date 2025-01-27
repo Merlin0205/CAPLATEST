@@ -11,6 +11,13 @@ import matplotlib.pyplot as plt
 import os
 import streamlit as st
 import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Initialize Faker
 fake = Faker()
@@ -296,51 +303,52 @@ def calculate_clustering_metrics(features, k_range=(1, 11)):
 
 def get_optimal_clusters_from_ai(inertia_values, silhouette_scores):
     """
-    Uses OpenAI API to analyze clustering metrics and recommend optimal number of clusters.
+    Uses OpenAI to analyze elbow and silhouette metrics and recommend optimal number of clusters.
     Args:
-        inertia_values: List of inertia scores from Elbow method
-        silhouette_scores: List of silhouette scores
+        inertia_values: List of inertia values for k=1 to k=10
+        silhouette_scores: List of silhouette scores for k=2 to k=10
     Returns:
         str: AI analysis and recommendation
     """
-    # Prepare prompt for OpenAI
-    prompt = f"""
-    Based on the following clustering metrics:
-    
-    Elbow Method (Inertia Values): {inertia_values}
-    Silhouette Scores: {silhouette_scores}
-    
-    Please analyze and recommend the optimal number of clusters (k).
-    Consider both metrics and provide your recommendation in the following format:
-    
-    - Elbow Method Analysis: [your analysis]
-    - Silhouette Score Analysis: [your analysis]
-    - Recommended k: [number or range]
-    - Explanation: [brief explanation of recommendation]
-    """
-    
+    prompt = f"""Analyze these clustering metrics and recommend the optimal number of clusters (k):
+
+Inertia values (k=1 to k=10):
+{inertia_values}
+
+Silhouette scores (k=2 to k=10):
+{silhouette_scores}
+
+Requirements:
+1. Consider both the elbow method (inertia) and silhouette scores
+2. The minimum number of clusters must be 3
+3. Explain the trade-off between number of clusters and model complexity
+4. Recommend a specific k or a narrow range (max 2 numbers)
+
+Format your response exactly like this:
+ANALYSIS:
+[2-3 sentences explaining what the metrics show]
+
+RECOMMENDATION:
+Recommended k: [number or range]
+
+JUSTIFICATION:
+[2-3 sentences explaining why this k is optimal]"""
+
     try:
-        print("Sending request to OpenAI API...")
-        # Call OpenAI API
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a data science expert specializing in cluster analysis."},
+                {"role": "system", "content": "You are an expert in analyzing clustering metrics. Provide clear and concise recommendations."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3
         )
         
-        print("Successfully received response from OpenAI")
-        # Extract and return the analysis
         return response.choices[0].message.content
         
     except Exception as e:
-        error_msg = f"Neočekávaná chyba při komunikaci s OpenAI: {str(e)}"
-        print(f"Unexpected Error: {str(e)}")
-        import traceback
-        print(f"Full traceback: {traceback.format_exc()}")
-        return error_msg
+        print(f"Error in AI analysis: {str(e)}")
+        return "Failed to get AI analysis. Please try again later."
 
 def evaluate_clusters_with_ai(features, labels, metrics):
     """
@@ -948,4 +956,118 @@ def select_best_customers(cluster_data, cluster_name, product_info, discount_per
     
     # Select top 5 matching customers
     return sorted(customer_scores, key=lambda x: x['score'], reverse=True)[:5]
+
+def generate_promotional_email(client, product_info, customer_info, segment_info):
+    """
+    Generate a promotional email using AI.
+    
+    Args:
+        client: OpenAI client instance
+        product_info: Dictionary with product details
+        customer_info: Dictionary with customer details
+        segment_info: Dictionary with segment details
+        
+    Returns:
+        dict: Dictionary containing email subject and body
+    """
+    prompt = f"""Create a stunning, creative promotional email that focuses on the product and offer. Make it visually appealing and persuasive.
+
+Use these details to create the email:
+
+Product Details:
+- Name: {product_info['product_name']}
+- Brand: {product_info['brand']}
+- Category: {product_info['category']}
+- Original Price: ${product_info['original_price']:.2f}
+- Discount: {product_info['discount_percent']}%
+- Final Price: ${product_info['discounted_price']:.2f}
+
+Target Audience Preferences:
+- Preferred Brand: {customer_info['profile']['top_brand']}
+- Preferred Category: {customer_info['profile']['top_category']}
+- Average Purchase Value: ${customer_info['profile']['avg_order_value']:.2f}
+- Last Purchase: {customer_info['profile']['last_purchase_days_ago']} days ago
+- Discount Sensitivity: {customer_info['profile']['discount_sensitivity']}
+
+Requirements:
+1. Create a modern, luxury-style promotional email
+2. Use HTML formatting for a beautiful design
+3. Include a strong call-to-action
+4. Emphasize the limited-time offer. Higlight it
+5. Focus on value proposition and savings
+6. Keep the design clean and professional
+7. Make the discount prominent and higlight it
+8. Include a clear call-to-action button
+8. No pictures. ALways white backgroung.
+
+Format your response exactly like this:
+SUBJECT: Your subject line here
+BODY: Your HTML formatted email body here"""
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a world-class email marketing designer and copywriter. Create stunning, highly personalized promotional emails that convert. Use modern design principles and persuasive writing techniques."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.9
+    )
+    
+    content = response.choices[0].message.content
+    subject = ""
+    body = ""
+    
+    for line in content.split('\n'):
+        if line.startswith('SUBJECT:'):
+            subject = line.replace('SUBJECT:', '').strip()
+        elif line.startswith('BODY:'):
+            body = content[content.index('BODY:') + 5:].strip()
+    
+    # Clean HTML code
+    body = body.strip('`').strip()
+    if body.startswith('```html'):
+        body = body[7:].strip()
+    if body.endswith('```'):
+        body = body[:-3].strip()
+    
+    return {
+        'subject': subject,
+        'body': body
+    }
+
+def send_promotional_email(config, subject, body, receiver_email):
+    """
+    Send promotional email using SMTP.
+    
+    Args:
+        config: Dictionary with SMTP configuration
+        subject: Email subject
+        body: HTML email body
+        receiver_email: Recipient's email address
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        # Get SMTP password from environment variable
+        smtp_password = os.getenv('SMTP_PASSWORD')
+        if not smtp_password:
+            return False, "❌ SMTP password not found in environment variables"
+
+        # Create the email message
+        msg = MIMEMultipart()
+        msg["From"] = config['sender_email']
+        msg["To"] = receiver_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "html"))
+
+        # Connect to the SMTP server and send the email
+        with smtplib.SMTP(config['smtp_server'], config['smtp_port']) as server:
+            server.starttls()  # Enable encrypted connection
+            server.login(config['sender_email'], smtp_password)
+            server.sendmail(config['sender_email'], receiver_email, msg.as_string())
+
+        return True, "✅ Email sent successfully!"
+    except Exception as e:
+        return False, f"❌ Error sending email: {str(e)}"
     

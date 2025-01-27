@@ -12,4 +12,5 @@ faker>=22.0.0
 gradio
 beautifulsoup4
 lxml
-pycryptodome>=3.19.0 
+pycryptodome>=3.19.0
+python-dotenv 

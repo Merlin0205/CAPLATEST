@@ -1,2 +1,14 @@
 [debug]
 developerMode = true
+
+[theme]
+primaryColor = "#FF4B4B"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
+font = "sans serif"
+
+[email]
+smtp_server = "smtp.gmail.com"
+smtp_port = 587
+sender_email = "romecapstone@gmail.com"
