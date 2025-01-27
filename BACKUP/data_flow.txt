@@ -1,0 +1,417 @@
+Customer Segmentation Analysis - Data Flow Documentation
+=================================================
+
+1. Data Generation and Initial Storage
+-----------------------------------
+Step 1: Generate Raw Datasets
+Input: None (Data generation functions)
+Process: Generate synthetic data using Faker and random distributions
+Outputs:
+- st.session_state.original_behavioral_data: Raw behavioral dataset
+  * Features: customer_id, email, total_spent, total_orders, avg_order_value, last_purchase_days_ago, categories_bought, brands_bought
+  * Contains deliberate errors for testing
+- st.session_state.original_preference_data: Raw preference dataset
+  * Features: customer_id, top_category, top_brand, price_preference_range, discount_sensitivity, luxury_preference_score
+- st.session_state.original_inventory_data: Raw inventory dataset
+  * Features: product_id, product_name, category, brand, stock_quantity, retail_price, cost_price, profit_margin
+
+2. Inventory Selection Process
+----------------------------
+Step 1: Filter and Sort Products
+Input: st.session_state.original_inventory_data
+Process:
+1. Create working copy: df = original_inventory_data.copy()
+2. Initialize empty set: filtered_products = set()
+3. Apply selected filters:
+   - If show_high_stock: Add top N products by stock_quantity to set
+   - If show_high_margin: Add top N products by profit_margin to set
+   - If show_high_price: Add top N products by retail_price to set
+   N = user selected num_products (5-50)
+Output: filtered_df (DataFrame with products matching any selected filter)
+
+Step 2: Product Selection and Details Display
+Input: filtered_df
+Process:
+1. Display dropdown with [""] + filtered_df["product_name"].tolist()
+2. When product selected:
+   selected_product_info = filtered_df[filtered_df["product_name"] == selected_product].iloc[0]
+3. Calculate promotion details:
+   - Allow discount selection (0-90%)
+   - Calculate new prices and margins:
+     * discounted_price = original_price * (1 - discount_percent/100)
+     * new_profit = discounted_price - cost_price
+     * new_margin = (new_profit / discounted_price) * 100
+
+4. Display Details Section:
+   a) Product Information Card:
+      - Product Name: Nike Air Max Premium
+      - Category: Athletic Shoes
+      - Brand: Nike
+      - Stock Available: 85 units
+   
+   b) Pricing Details Card:
+      - Original Price: $189.99
+      - Discount Applied: 25%
+      - Final Price: $142.49
+   
+   c) Business Metrics Card:
+      - Original Margin: 45%
+      - New Margin: 33%
+      - Expected Revenue: $12,111.65 (based on 85 units)
+      - Expected Profit: $3,995.84
+   
+   d) Market Analysis Card:
+      - Price Position: Premium Range
+      - Stock Level: Healthy
+      - Margin Impact: Moderate
+      - Promotion Urgency: Medium
+
+   e) Recommendation Summary:
+      - Discount Level: Appropriate for premium product
+      - Stock Utilization: Good potential for clearance
+      - Profit Protection: Maintains healthy margin
+      - Market Position: Maintains premium brand image
+
+Output: 
+1. st.session_state.selected_product_info
+   Contains complete product record:
+   * product_id: Unique identifier
+   * product_name: Full product name
+   * category: Product category
+   * brand: Product brand
+   * stock_quantity: Current stock level
+   * retail_price: Selling price
+   * cost_price: Purchase price
+   * profit_margin: Profit percentage
+
+2. st.session_state.promotion_details
+   Contains promotion configuration:
+   * product_id: Selected product ID
+   * product_name: Selected product name
+   * category: Product category
+   * brand: Product brand
+   * original_price: Original retail price
+   * discount_percent: Applied discount
+   * discounted_price: Final price after discount
+   * original_profit: Profit before discount
+   * new_profit: Profit after discount
+   * original_margin: Margin percentage before discount
+   * new_margin: Margin percentage after discount
+   * stock_quantity: Available stock
+
+Display Format:
+- All cards use Streamlit columns for organized layout
+- Metrics displayed using st.metric for visual impact
+- Color coding for key changes (green/red for positive/negative)
+- Expandable sections for detailed breakdowns
+- Interactive charts for margin impact visualization
+
+Step 3: Customer Cluster Selection and Target Customer Analysis
+Input: 
+- st.session_state.selected_product_info: Selected product details
+- st.session_state.promotion_details: Promotion configuration
+- st.session_state.final_named_clusters: Complete customer data with clusters
+
+Process:
+1. Data Preparation:
+   - Create copy of customer data: selected_cluster_customers = final_named_clusters.copy()
+   - Calculate cluster statistics:
+     * Average spending
+     * Average order value
+     * Most common categories
+     * Preferred brands
+     * Discount sensitivity
+     * Luxury preferences
+
+2. AI Analysis:
+   a) Create comprehensive prompt with:
+      - Product details (name, category, brand)
+      - Pricing information (original, discounted, discount percentage)
+      - Detailed cluster statistics
+      - Individual customer examples from each cluster
+   
+   b) AI evaluation criteria:
+      - Match between product category and customer preferences
+      - Price point vs customer spending patterns
+      - Brand alignment with customer history
+      - Discount level vs customer sensitivity
+      - Product type vs customer category preferences
+
+   c) Two-step selection process:
+      1. Cluster Selection:
+         - Evaluate all clusters based on aggregate metrics
+         - Select best matching cluster based on overall fit
+      2. Customer Selection:
+         - Analyze individual customers within chosen cluster
+         - Select single best-matching customer based on personal metrics
+
+3. Response Parsing:
+   - Extract structured information:
+     * cluster_id: Selected cluster identifier
+     * cluster_name: Name of selected cluster
+     * match_score: Cluster match percentage
+     * cluster_explanation: Reasoning for cluster selection
+     * selected_customer_id: Chosen customer's ID
+     * customer_explanation: Reasoning for customer selection
+
+Output: 
+st.session_state.target_details: Dictionary containing:
+1. Cluster Information:
+   - cluster_id: ID of recommended cluster
+   - cluster_name: Name of cluster
+   - match_score: Match confidence (0-100%)
+   - cluster_explanation: Why this cluster was chosen
+
+2. Customer Information:
+   - selected_customer_id: ID of chosen customer
+   - customer_explanation: Why this customer was selected
+   - customer_data: Complete customer record including:
+     * total_spent: Historical spending
+     * avg_order_value: Average purchase amount
+     * top_category: Preferred product category
+     * top_brand: Preferred brand
+     * discount_sensitivity: Response to promotions
+     * luxury_preference_score: Premium product affinity
+
+Usage:
+- Target details are used in Email Design section for:
+  * Personalized content creation
+  * Custom pricing strategy
+  * Product recommendation refinement
+  * Communication style adaptation
+
+Step 4: Navigation Control
+Input: st.session_state.selected_product_info
+Process:
+1. Check if product is selected (selected_product_info exists in session_state)
+2. If not selected: Display error message
+3. If selected: Enable navigation
+Output:
+- st.session_state.go_to_email: True if product selected
+- Error message if no selection
+
+3. Session State Variables
+-------------------------
+Input Variables:
+- original_inventory_data: Complete inventory dataset
+- num_products: Number of products to display (5-50)
+- show_high_stock: Boolean for high stock filter
+- show_high_margin: Boolean for high margin filter
+- show_high_price: Boolean for high price filter
+
+Working Variables:
+- filtered_products: Set of product IDs matching filters
+- filtered_df: DataFrame of filtered products
+- selected_product: Currently selected product name
+
+Output Variables:
+- selected_product_info: Complete info about selected product
+- go_to_email: Navigation flag for next section
+
+4. Data Processing Pipeline
+-------------------------
+Step 2: Data Consistency Check
+Input: st.session_state.original_behavioral_data
+Process: Check for invalid emails, missing values, negative values
+Output: 
+- st.session_state.clean_behavioral_data: Cleaned behavioral data with problematic rows removed
+
+Step 3: Data Privacy Implementation
+Input: st.session_state.clean_behavioral_data
+Process: Remove sensitive information (email addresses)
+Output: 
+- st.session_state.anonymized_behavioral_data: Privacy-compliant behavioral data
+
+Step 4: String to Numeric Conversion
+Input: st.session_state.original_preference_data
+Process: Convert categorical values to numeric using mapping dictionaries
+Outputs:
+- st.session_state.numeric_preference_data: Preference data with numeric categories
+- st.session_state.category_mapping: Category name to ID mapping
+- st.session_state.brand_mapping: Brand name to ID mapping
+
+Step 5: Data Combination
+Inputs: 
+- st.session_state.anonymized_behavioral_data
+- st.session_state.numeric_preference_data
+Process: Merge datasets on customer_id
+Output: 
+- st.session_state.combined_raw_data: Combined behavioral and preference data
+
+Step 6: Data Normalization
+Input: st.session_state.combined_raw_data
+Process: StandardScaler normalization of numeric features
+Output: 
+- st.session_state.normalized_kmeans_data: Normalized data ready for clustering
+Features normalized:
+- price_preference_range
+- discount_sensitivity
+- luxury_preference_score
+- total_spent
+- total_orders
+- avg_order_value
+- last_purchase_days_ago
+- categories_bought
+- brands_bought
+
+5. Clustering Process
+-------------------
+Step 1: Determine Optimal Number of Clusters
+Input: st.session_state.normalized_kmeans_data
+Process: 
+- Calculate inertia values and silhouette scores for k=1 to k=10
+- Get AI recommendation for optimal k
+Output: 
+- st.session_state.optimal_k (selected number of clusters)
+- st.session_state.clustering_analysis (AI analysis of optimal k)
+
+Step 2: K-means Clustering
+Input: st.session_state.normalized_kmeans_data (excluding customer_id)
+Process:
+- Initialize KMeans with optimal_k clusters
+- Fit model to normalized data
+Output:
+- st.session_state.clustered_data (normalized data with cluster assignments)
+- st.session_state.final_clustered_data (original data with cluster assignments)
+
+Step 3: Cluster Validation
+Input: st.session_state.clustered_data
+Process:
+- Calculate inter-cluster distances
+- Generate distance matrix visualization
+- Get AI evaluation of cluster quality
+Output:
+- Distance matrix plot
+- st.session_state.cluster_validation (AI analysis of cluster quality)
+
+Step 4: Cluster Naming
+Input: st.session_state.final_clustered_data
+Process:
+- Generate cluster statistics for each cluster
+- Get AI suggestions for cluster names and explanations
+- Allow manual editing of names and explanations
+Output:
+- st.session_state.cluster_names (AI suggestions)
+- st.session_state.final_named_clusters (final dataset with cluster names and explanations)
+
+6. Dataset Column Order
+----------------------
+Original Behavioral Data:
+1. customer_id
+2. email
+3. total_spent
+4. total_orders
+5. avg_order_value
+6. last_purchase_days_ago
+7. categories_bought
+8. brands_bought
+
+Original Preference Data:
+1. customer_id
+2. top_category
+3. top_brand
+4. price_preference_range
+5. discount_sensitivity
+6. luxury_preference_score
+
+Final Named Clusters Data:
+1. customer_id
+2. cluster
+3. cluster_name
+4. email
+5. total_spent
+6. total_orders
+7. avg_order_value
+8. last_purchase_days_ago
+9. categories_bought
+10. brands_bought
+11. top_category
+12. top_brand
+13. price_preference_range
+14. discount_sensitivity
+15. luxury_preference_score
+16. cluster_explanation
+
+7. Key Variables Summary
+----------------------
+Raw Data:
+- st.session_state.original_behavioral_data: Raw behavioral dataset
+- st.session_state.original_preference_data: Raw preference dataset
+- st.session_state.original_inventory_data: Raw inventory dataset
+
+Processing Variables:
+- st.session_state.clean_behavioral_data: Cleaned behavioral data
+- st.session_state.anonymized_behavioral_data: Data with removed emails
+- st.session_state.numeric_preference_data: Preference data with numeric values
+- st.session_state.combined_raw_data: Merged behavioral and preference data
+- st.session_state.normalized_kmeans_data: Normalized data for clustering
+
+Clustering Results:
+- st.session_state.clustered_data: Normalized data with cluster assignments
+- st.session_state.final_clustered_data: Original data with cluster assignments
+- st.session_state.cluster_names: AI-suggested names and explanations
+- st.session_state.final_named_clusters: Final dataset with cluster names
+
+8. Notes
+--------
+- All variables follow st.session_state.{name} convention
+- Each step preserves original data while creating transformed versions
+- Clustering uses only numeric features, excluding customer_id
+- Final datasets maintain data lineage from raw to clustered results
+- Toggle switches in UI remember their state between clustering updates 
+
+9. Example Selection Analysis
+---------------------------
+Product Selected:
+- Name: Nike Air Max Premium
+- Category: Athletic Shoes
+- Brand: Nike
+- Original Price: $189.99
+- Discount: 25%
+- Discounted Price: $142.49
+- Original Margin: 45%
+- New Margin: 33%
+- Stock: 85 units
+
+Selected Customer Details:
+Customer ID: CUST_7845
+Cluster: "Premium Sports Enthusiasts"
+Match Score: 92%
+
+Customer Profile:
+- Total Spent: $3,450 in last 12 months
+- Average Order: $287.50
+- Top Category: Athletic Wear
+- Top Brand: Nike
+- Discount Sensitivity: Low (2/10)
+- Luxury Preference: High (8/10)
+
+Selection Reasoning:
+1. Product-Customer Match:
+   - Strong brand alignment (Nike is customer's preferred brand)
+   - Category match (Athletic shoes fits with Athletic Wear preference)
+   - Price point aligns with customer's average order value
+   
+2. Promotion Fit:
+   - 25% discount is attractive yet maintains exclusivity
+   - Customer's low discount sensitivity suggests they value quality over price
+   - Discounted price still within premium range matching luxury preference
+
+3. Behavioral Indicators:
+   - High historical spend indicates purchasing power
+   - Consistent brand loyalty to Nike
+   - Premium product preference matches Air Max positioning
+   - Regular purchase pattern in athletic category
+
+Expected Response:
+- High likelihood of purchase (85% confidence)
+- Potential for additional item purchase
+- Likely to engage within 48 hours based on past behavior
+- May become repeat premium shoe buyer
+
+This example demonstrates ideal alignment between:
+- Product characteristics
+- Customer preferences
+- Pricing strategy
+- Brand affinity
+- Category interest 
