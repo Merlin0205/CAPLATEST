@@ -38,8 +38,19 @@ BRANDS = [
 ADJECTIVES = ["Classic", "Modern", "Stylish", "Luxury", "Casual", "Comfortable", "Premium"]
 COLORS = ["Red", "Blue", "Black", "White", "Green", "Beige", "Pink", "Grey"]
 
-# Initialize OpenAI client using API key from session state
-client = OpenAI(api_key=st.session_state.get("openai_api_key", ""))
+# Initialize OpenAI client
+client = None
+
+def get_openai_client():
+    """Gets or creates OpenAI client with current API key."""
+    global client
+    if client is None and "openai_api_key" in st.session_state and st.session_state.openai_api_key:
+        try:
+            client = OpenAI(api_key=st.session_state.openai_api_key)
+        except Exception as e:
+            st.error(f"Error initializing OpenAI client: {str(e)}")
+            return None
+    return client
 
 def generate_behavioral_data(num_customers=2000):
     """
@@ -310,6 +321,10 @@ def get_optimal_clusters_from_ai(inertia_values, silhouette_scores):
     Returns:
         str: AI analysis and recommendation
     """
+    client = get_openai_client()
+    if not client:
+        return "Failed to initialize OpenAI client. Please check your API key."
+        
     prompt = f"""Analyze these clustering metrics and recommend the optimal number of clusters (k):
 
 Inertia values (k=1 to k=10):
@@ -360,6 +375,10 @@ def evaluate_clusters_with_ai(features, labels, metrics):
     Returns:
         str: AI evaluation and description of clusters
     """
+    client = get_openai_client()
+    if not client:
+        return "Failed to initialize OpenAI client. Please check your API key."
+    
     # Prepare cluster statistics
     cluster_stats = {}
     for i in range(len(set(labels))):
@@ -678,51 +697,63 @@ Cluster Data:
     return prompt + "\n" + "\n".join(cluster_summary)
 
 def get_cluster_names_from_ai(data):
-    """Get cluster names and explanations from OpenAI."""
-    try:
-        # Generate prompt
-        prompt = generate_cluster_naming_prompt(data)
-        
-        # Get response from OpenAI
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a customer segmentation expert. Provide concise and descriptive cluster names with clear explanations."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.5
-        )
-        
-        # Parse response
-        ai_response = response.choices[0].message.content
-        
-        # Extract cluster names and explanations
-        cluster_info = {}
-        current_cluster = None
-        current_text = []
-        
-        for line in ai_response.split('\n'):
-            if line.startswith('Cluster '):
-                # Save previous cluster info if exists
-                if current_cluster is not None and current_text:
-                    cluster_info[current_cluster] = '\n'.join(current_text)
-                
-                # Start new cluster
-                current_cluster = int(line.split(':')[0].split()[1])
-                name = line.split(':', 1)[1].strip()
-                current_text = [name]
-            elif line.strip() and current_cluster is not None:
-                current_text.append(line.strip())
-        
-        # Save last cluster
-        if current_cluster is not None and current_text:
-            cluster_info[current_cluster] = '\n'.join(current_text)
-        
-        return cluster_info
-        
-    except Exception as e:
-        print(f"Error getting AI cluster names: {str(e)}")
-        return None
+    """
+    Uses OpenAI to generate descriptive names for clusters.
+    """
+    client = get_openai_client()
+    if not client:
+        return "Failed to initialize OpenAI client. Please check your API key."
+    
+    # Prepare cluster statistics
+    cluster_stats = {}
+    for i in range(len(set(data["cluster"]))):
+        cluster_mask = data["cluster"] == i
+        cluster_features = data[cluster_mask]
+        cluster_stats[f"Cluster {i}"] = {
+            "size": sum(cluster_mask),
+            "mean_values": cluster_features.mean(axis=0).tolist(),
+            "std_values": cluster_features.std(axis=0).tolist()
+        }
+    
+    # Generate prompt
+    prompt = generate_cluster_naming_prompt(data)
+    
+    # Get response from OpenAI
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a customer segmentation expert. Provide concise and descriptive cluster names with clear explanations."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.5
+    )
+    
+    # Parse response
+    ai_response = response.choices[0].message.content
+    
+    # Extract cluster names and explanations
+    cluster_info = {}
+    current_cluster = None
+    current_text = []
+    
+    for line in ai_response.split('\n'):
+        if line.startswith('Cluster '):
+            # Save previous cluster info if exists
+            if current_cluster is not None and current_text:
+                cluster_info[current_cluster] = '\n'.join(current_text)
+            
+            # Start new cluster
+            current_cluster = int(line.split(':')[0].split()[1])
+            name = line.split(':', 1)[1].strip()
+            current_text = [name]
+        elif line.strip() and current_cluster is not None:
+            current_text.append(line.strip())
+    
+    # Save last cluster
+    if current_cluster is not None and current_text:
+        cluster_info[current_cluster] = '\n'.join(current_text)
+    
+    return cluster_info
 
 def create_named_clustered_dataset(clustered_data, cluster_names):
     """Create a new dataset with AI-suggested cluster names."""
@@ -970,6 +1001,13 @@ def generate_promotional_email(client, product_info, customer_info, segment_info
     Returns:
         dict: Dictionary containing email subject and body
     """
+    client = get_openai_client()
+    if not client:
+        return {
+            "subject": "Error: OpenAI Client Not Available",
+            "body": "Failed to initialize OpenAI client. Please check your API key."
+        }
+    
     prompt = f"""Create a stunning, creative promotional email that focuses on the product and offer. Make it visually appealing and persuasive.
 
 Use these details to create the email:
