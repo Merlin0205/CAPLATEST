@@ -48,9 +48,9 @@ def check_password():
     
     return st.session_state["password_correct"]
 
-# Kontrola hesla
+# Password check
 if not check_password():
-    st.stop()  # Zastaví aplikaci, pokud není zadáno správné heslo
+    st.stop()  # Stop the application if password is incorrect
 
 import pandas as pd
 from functions import (
@@ -387,39 +387,17 @@ elif menu_selection == "Clustering":
                 if st.button("Run AI Analysis for Optimal Number of Clusters", type="primary"):
                     progress_text = st.empty()
                     progress_bar = st.progress(0)
-                    progress_details = st.empty()
-                    debug_log = st.empty()
                     
                     # Calculate metrics if not already calculated
                     if "inertia_values" not in st.session_state or "silhouette_scores" not in st.session_state:
-                        progress_text.text("Krok 1/4: Počítám metriky pro clustering...")
-                        with st.spinner("Počítám clustering metriky..."):
-                            # Create a StringIO object to capture print output
-                            import io
-                            import sys
-                            old_stdout = sys.stdout
-                            new_stdout = io.StringIO()
-                            sys.stdout = new_stdout
-                            
-                            # Run the calculation
+                        progress_text.text("Step 1/4: Calculating clustering metrics...")
+                        with st.spinner("Calculating clustering metrics..."):
                             st.session_state.inertia_values, st.session_state.silhouette_scores = calculate_clustering_metrics(features)
-                            
-                            # Get the captured output and restore stdout
-                            debug_output = new_stdout.getvalue()
-                            sys.stdout = old_stdout
-                            
-                            # Display debug output in the app
-                            debug_log.markdown("""
-                            <div style='background-color: #1a1a1a; padding: 10px; border-radius: 5px; margin: 10px 0;'>
-                                <h4 style='color: #00ff00;'>🔍 Debug Log:</h4>
-                                <pre style='color: #ffffff; white-space: pre-wrap;'>{}</pre>
-                            </div>
-                            """.format(debug_output), unsafe_allow_html=True)
                         progress_bar.progress(25)
                     
                     # Get AI recommendation
-                    progress_text.text("Krok 2/4: Získávám AI analýzu...")
-                    with st.spinner("Získávám AI doporučení..."):
+                    progress_text.text("Step 2/4: Getting AI analysis...")
+                    with st.spinner("Getting AI recommendations..."):
                         st.session_state.clustering_analysis = get_optimal_clusters_from_ai(
                             st.session_state.inertia_values,
                             st.session_state.silhouette_scores
@@ -427,7 +405,7 @@ elif menu_selection == "Clustering":
                     progress_bar.progress(50)
                     
                     # Extract recommended k range and set initial slider value
-                    progress_text.text("Krok 3/4: Zpracovávám AI doporučení...")
+                    progress_text.text("Step 3/4: Processing AI recommendations...")
                     analysis = st.session_state.clustering_analysis
                     import re
                     k_range = re.findall(r'Recommended k: (\d+)(?:-(\d+))?', analysis)
@@ -440,8 +418,8 @@ elif menu_selection == "Clustering":
                     progress_bar.progress(75)
                     
                     # Perform initial clustering with recommended k
-                    progress_text.text("Krok 4/4: Provádím počáteční clustering...")
-                    with st.spinner("Provádím clustering..."):
+                    progress_text.text("Step 4/4: Performing initial clustering...")
+                    with st.spinner("Performing clustering..."):
                         cluster_labels = perform_kmeans_clustering(
                             st.session_state.normalized_kmeans_data,
                             st.session_state.optimal_k
@@ -472,8 +450,8 @@ elif menu_selection == "Clustering":
                         st.session_state.ai_validation = ai_evaluation
                     
                     progress_bar.progress(100)
-                    progress_text.text("✅ Analýza dokončena!")
-                    st.success("Analýza úspěšně dokončena! Výsledky se zobrazí níže.")
+                    progress_text.text("✅ Analysis completed!")
+                    st.success("Analysis successfully completed! Results will be displayed below.")
             
             # Display plots and analysis if available
             if "clustering_analysis" in st.session_state:
@@ -837,8 +815,8 @@ elif menu_selection == "Inventory & Customer Selection":
                 "category": "Category",
                 "brand": "Brand",
                 "stock_quantity": st.column_config.NumberColumn("Stock", format="%d"),
-                "retail_price": st.column_config.NumberColumn("Retail Price", format="$%.2f"),
-                "cost_price": st.column_config.NumberColumn("Cost Price", format="$%.2f"),
+                "retail_price": st.column_config.NumberColumn("Retail Price", format="€%.2f"),
+                "cost_price": st.column_config.NumberColumn("Cost Price", format="€%.2f"),
                 "profit_margin": st.column_config.NumberColumn("Profit Margin", format="%.1f%%")
             }
         )
@@ -851,8 +829,8 @@ elif menu_selection == "Inventory & Customer Selection":
         if 'selected_product_option' not in st.session_state:
             st.session_state.selected_product_option = None
 
-        product_options = [""] + [
-            f"{row['product_name']} | {row['category']} | ${row['retail_price']:.2f} | Margin: {row['profit_margin']:.1f}% | Stock: {row['stock_quantity']}"
+        product_options = [
+            f"{row['product_name']} | {row['category']} | €{row['retail_price']:.2f} | Margin: {row['profit_margin']:.1f}% | Stock: {row['stock_quantity']}"
             for _, row in filtered_df.iterrows()
         ]
 
@@ -901,8 +879,8 @@ elif menu_selection == "Inventory & Customer Selection":
             with col2:
                 st.info("Business Metrics")
                 st.write(f"**Stock:** {selected_product_info['stock_quantity']} units")
-                st.write(f"**Retail Price:** ${selected_product_info['retail_price']:.2f}")
-                st.write(f"**Cost Price:** ${selected_product_info['cost_price']:.2f}")
+                st.write(f"**Retail Price:** €{selected_product_info['retail_price']:.2f}")
+                st.write(f"**Cost Price:** €{selected_product_info['cost_price']:.2f}")
                 st.write(f"**Profit Margin:** {selected_product_info['profit_margin']:.1f}%")
             
             # Discount Selection
@@ -928,10 +906,10 @@ elif menu_selection == "Inventory & Customer Selection":
                 new_margin = (new_profit / discounted_price) * 100
                 
                 st.info("Discount Analysis")
-                st.write(f"**Original Price:** ${original_price:.2f}")
-                st.write(f"**Discounted Price:** ${discounted_price:.2f}")
-                st.write(f"**Original Profit:** ${original_profit:.2f} ({original_margin:.1f}%)")
-                st.write(f"**New Profit:** ${new_profit:.2f} ({new_margin:.1f}%)")
+                st.write(f"**Original Price:** €{original_price:.2f}")
+                st.write(f"**Discounted Price:** €{discounted_price:.2f}")
+                st.write(f"**Original Profit:** €{original_profit:.2f} ({original_margin:.1f}%)")
+                st.write(f"**New Profit:** €{new_profit:.2f} ({new_margin:.1f}%)")
             
             # Store promotion details in session state
             promotion_details = {
@@ -1003,8 +981,8 @@ elif menu_selection == "Inventory & Customer Selection":
                 st.info("Cluster Statistics:")
                 stats = st.session_state.selected_segment['stats']
                 st.write(f"""
-                - Average Spent: ${stats['avg_spent']:.2f}
-                - Average Order Value: ${stats['avg_order']:.2f}
+                - Average Spent: €{stats['avg_spent']:.2f}
+                - Average Order Value: €{stats['avg_order']:.2f}
                 - Most Common Brand: {stats['top_brand']}
                 - Most Common Category: {stats['top_category']}
                 """)
@@ -1064,8 +1042,8 @@ elif menu_selection == "Inventory & Customer Selection":
                 with col2:
                     st.info("Customer Profile:")
                     st.write(f"""
-                    - Total Spent: ${best_customer['data']['total_spent']:.2f}
-                    - Average Order Value: ${best_customer['data']['avg_order_value']:.2f}
+                    - Total Spent: €{best_customer['data']['total_spent']:.2f}
+                    - Average Order Value: €{best_customer['data']['avg_order_value']:.2f}
                     - Favorite Brand: {best_customer['data']['top_brand']}
                     - Favorite Category: {best_customer['data']['top_category']}
                     - Last Purchase: {best_customer['data']['last_purchase_days_ago']} days ago
@@ -1130,9 +1108,9 @@ elif menu_selection == "Email Design":
             st.write(f"- Name: {product['product_name']}")
             st.write(f"- Brand: {product['brand']}")
             st.write(f"- Category: {product['category']}")
-            st.write(f"- Original Price: ${product['original_price']:.2f}")
+            st.write(f"- Original Price: €{product['original_price']:.2f}")
             st.write(f"- Discount: {product['discount_percent']}%")
-            st.write(f"- Final Price: ${product['discounted_price']:.2f}")
+            st.write(f"- Final Price: €{product['discounted_price']:.2f}")
         
         with col2:
             st.write("**Customer Information:**")
@@ -1141,7 +1119,7 @@ elif menu_selection == "Email Design":
             st.write(f"- Customer Segment: {segment['cluster_name']}")
             st.write(f"- Favorite Brand: {customer['profile']['top_brand']}")
             st.write(f"- Favorite Category: {customer['profile']['top_category']}")
-            st.write(f"- Average Order Value: ${customer['profile']['avg_order_value']:.2f}")
+            st.write(f"- Average Order Value: €{customer['profile']['avg_order_value']:.2f}")
             st.write(f"- Last Purchase: {customer['profile']['last_purchase_days_ago']} days ago")
             st.write(f"- Discount Sensitivity: {customer['profile']['discount_sensitivity']}/10")
     

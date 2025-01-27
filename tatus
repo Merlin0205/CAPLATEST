@@ -1,0 +1,17 @@
+[33mcommit ba7cceb6be150522f960bb3254dafb7bcd4abd31[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Merlin0205 <jan.krejci@krejca.eu>
+Date:   Mon Jan 27 20:43:56 2025 +0100
+
+    Oprava resetování emailu při změně produktu a zákazníka, optimalizace volání AI funkcí
+
+[33mcommit 3f8c3d85a888f80cd1072bc686451f95f9c168eb[m
+Author: Merlin0205 <jan.krejci@krejca.eu>
+Date:   Mon Jan 27 20:25:32 2025 +0100
+
+    Fixed product selection persistence and email preview
+
+[33mcommit fd1b6fbe8726214ac84581c774644e6533ea2e9c[m[33m ([m[1;31morigin/master[m[33m)[m
+Author: Merlin0205 <jan.krejci@krejca.eu>
+Date:   Mon Jan 27 17:47:22 2025 +0100
+
+    Initial commit - aktuální verze
