@@ -452,7 +452,6 @@ elif menu_selection == "Clustering":
                     progress_bar.progress(100)
                     progress_text.text("✅ Analýza dokončena!")
                     st.success("Analýza úspěšně dokončena! Výsledky se zobrazí níže.")
-                    st.rerun()
             
             # Display plots and analysis if available
             if "clustering_analysis" in st.session_state:
@@ -498,8 +497,15 @@ elif menu_selection == "Clustering":
                     selected_k = st.slider("Number of clusters (k)", 
                                          min_value=2, 
                                          max_value=10,
-                                         value=st.session_state.optimal_k)
-                    if selected_k != st.session_state.optimal_k:
+                                         value=st.session_state.optimal_k,
+                                         key="cluster_slider")
+                    
+                    # Only update if the value actually changed
+                    if "last_selected_k" not in st.session_state:
+                        st.session_state.last_selected_k = selected_k
+                    
+                    if selected_k != st.session_state.last_selected_k:
+                        st.session_state.last_selected_k = selected_k
                         st.session_state.optimal_k = selected_k
                         
                         # Reset cluster names when changing number of clusters
@@ -537,8 +543,6 @@ elif menu_selection == "Clustering":
                             len(set(st.session_state.clustered_data['cluster']))
                         )
                         st.session_state.ai_validation = ai_evaluation
-                        
-                        st.rerun()
 
     # Step 2: K-means Clustering
     if "clustering_analysis" in st.session_state:
