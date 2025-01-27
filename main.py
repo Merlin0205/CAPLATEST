@@ -387,6 +387,7 @@ elif menu_selection == "Clustering":
                 if st.button("Run AI Analysis for Optimal Number of Clusters", type="primary"):
                     progress_text = st.empty()
                     progress_bar = st.progress(0)
+                    progress_details = st.empty()
                     
                     # Calculate metrics if not already calculated
                     if "inertia_values" not in st.session_state or "silhouette_scores" not in st.session_state:

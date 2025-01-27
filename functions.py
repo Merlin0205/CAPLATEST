@@ -15,6 +15,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+import time
 
 # Load environment variables
 load_dotenv()
@@ -303,23 +304,48 @@ def calculate_clustering_metrics(features, k_range=(1, 11)):
     Returns:
         tuple: (inertia_values, silhouette_scores)
     """
+    print(f"Starting clustering metrics calculation for k range {k_range}")
+    print(f"Input features shape: {features.shape}")
+    
     inertia_values = []
     silhouette_scores = []
     
     # Calculate metrics for each k
     for k in range(k_range[0], k_range[1]):
+        start_time = time.time()
+        print(f"\nProcessing k={k}...")
+        
         # Fit KMeans
+        print(f"Fitting KMeans for k={k}")
+        kmeans_start = time.time()
         kmeans = KMeans(n_clusters=k, random_state=42)
         kmeans.fit(features)
+        kmeans_time = time.time() - kmeans_start
+        print(f"KMeans fitting completed in {kmeans_time:.2f} seconds")
         
         # Calculate inertia
+        print(f"Calculating inertia for k={k}")
+        inertia_start = time.time()
         inertia_values.append(kmeans.inertia_)
+        inertia_time = time.time() - inertia_start
+        print(f"Inertia calculation completed in {inertia_time:.2f} seconds")
         
         # Calculate silhouette score (only for k >= 2)
         if k >= 2:
+            print(f"Calculating silhouette score for k={k}")
+            silhouette_start = time.time()
             labels = kmeans.labels_
             sil_score = silhouette_score(features, labels)
             silhouette_scores.append(sil_score)
+            silhouette_time = time.time() - silhouette_start
+            print(f"Silhouette score calculation completed in {silhouette_time:.2f} seconds")
+        
+        total_time = time.time() - start_time
+        print(f"Total processing time for k={k}: {total_time:.2f} seconds")
+    
+    print("\nClustering metrics calculation completed")
+    print(f"Final inertia values: {inertia_values}")
+    print(f"Final silhouette scores: {silhouette_scores}")
     
     return inertia_values, silhouette_scores
 
