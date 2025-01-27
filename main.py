@@ -388,12 +388,33 @@ elif menu_selection == "Clustering":
                     progress_text = st.empty()
                     progress_bar = st.progress(0)
                     progress_details = st.empty()
+                    debug_log = st.empty()
                     
                     # Calculate metrics if not already calculated
                     if "inertia_values" not in st.session_state or "silhouette_scores" not in st.session_state:
                         progress_text.text("Krok 1/4: Počítám metriky pro clustering...")
                         with st.spinner("Počítám clustering metriky..."):
+                            # Create a StringIO object to capture print output
+                            import io
+                            import sys
+                            old_stdout = sys.stdout
+                            new_stdout = io.StringIO()
+                            sys.stdout = new_stdout
+                            
+                            # Run the calculation
                             st.session_state.inertia_values, st.session_state.silhouette_scores = calculate_clustering_metrics(features)
+                            
+                            # Get the captured output and restore stdout
+                            debug_output = new_stdout.getvalue()
+                            sys.stdout = old_stdout
+                            
+                            # Display debug output in the app
+                            debug_log.markdown("""
+                            <div style='background-color: #1a1a1a; padding: 10px; border-radius: 5px; margin: 10px 0;'>
+                                <h4 style='color: #00ff00;'>🔍 Debug Log:</h4>
+                                <pre style='color: #ffffff; white-space: pre-wrap;'>{}</pre>
+                            </div>
+                            """.format(debug_output), unsafe_allow_html=True)
                         progress_bar.progress(25)
                     
                     # Get AI recommendation
