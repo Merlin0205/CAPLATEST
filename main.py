@@ -9,8 +9,12 @@ st.set_page_config(layout="wide", page_title="Customer Data Analysis")
 
 # Initialize OpenAI client
 client = None
-if "openai_api_key" in st.session_state:
-    client = OpenAI(api_key=st.session_state.openai_api_key)
+if "openai_api_key" in st.session_state and st.session_state.openai_api_key:
+    try:
+        client = OpenAI(api_key=st.session_state.openai_api_key)
+    except Exception as e:
+        st.error(f"Error initializing OpenAI client: {str(e)}")
+        client = None
 
 # Initialize session state
 if "password_correct" not in st.session_state:
