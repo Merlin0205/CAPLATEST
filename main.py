@@ -13,24 +13,14 @@ if "password_correct" not in st.session_state:
 
 # Login check and API key decryption
 def check_password():
-    """Returns `True` if the password is correct and sets the API key."""
+    """Returns `True` if the password is correct."""
     def password_entered():
-        """Verifies password and retrieves API key."""
+        """Verifies password."""
         try:
             if "password" in st.session_state and verify_password(st.session_state["password"]):
-                api_key = get_api_key(st.session_state["password"])
-                if api_key:
-                    st.session_state["password_correct"] = True
-                    # Try to get API key from environment/secrets first
-                    try:
-                        st.session_state["openai_api_key"] = st.secrets["OPENAI_API_KEY"]
-                    except:
-                        st.session_state["openai_api_key"] = api_key
-                    del st.session_state["password"]  # Delete password from session state
-                    st.success("✅ Login successful! Application is starting...")
-                else:
-                    st.session_state["password_correct"] = False
-                    st.error("❌ Incorrect password")
+                st.session_state["password_correct"] = True
+                del st.session_state["password"]  # Delete password from session state
+                st.success("✅ Login successful! Application is starting...")
             else:
                 st.session_state["password_correct"] = False
                 st.error("❌ Incorrect password")
@@ -1120,7 +1110,6 @@ elif menu_selection == "Email Design":
         if st.button("🎨 Generate Creative Email", type="primary"):
             with st.spinner("🤖 Generating your personalized email..."):
                 email_content = generate_promotional_email(
-                    client,
                     product,
                     customer,
                     segment

@@ -45,24 +45,19 @@ def get_openai_client():
     """Gets or creates OpenAI client with current API key."""
     global client
     try:
-        # First try to get API key from session state
-        api_key = st.session_state.get("openai_api_key")
+        # Try to get API key from Streamlit secrets
+        api_key = st.secrets.get("OPENAI_API_KEY")
         
-        # If not in session state, try to get from environment/secrets
         if not api_key:
-            try:
-                api_key = st.secrets["OPENAI_API_KEY"]
-            except:
-                st.error("OpenAI API key not found in session state or secrets")
-                return None
+            st.error("OpenAI API key not found in Streamlit secrets. Please add it in your Streamlit Cloud settings.")
+            return None
         
-        # If we have an API key and client is not initialized
-        if api_key and (client is None or client.api_key != api_key):
+        # Initialize client if not exists or if API key changed
+        if client is None or client.api_key != api_key:
             client = OpenAI(
-                api_key=api_key,
-                base_url="https://api.openai.com/v1"
+                api_key=api_key
             )
-            
+        
         return client
     except Exception as e:
         st.error(f"Error initializing OpenAI client: {str(e)}")
@@ -1015,12 +1010,11 @@ def select_best_customers(cluster_data, cluster_name, product_info, discount_per
     # Select top 5 matching customers
     return sorted(customer_scores, key=lambda x: x['score'], reverse=True)[:5]
 
-def generate_promotional_email(client, product_info, customer_info, segment_info):
+def generate_promotional_email(product_info, customer_info, segment_info):
     """
     Generate a promotional email using AI.
     
     Args:
-        client: OpenAI client instance
         product_info: Dictionary with product details
         customer_info: Dictionary with customer details
         segment_info: Dictionary with segment details
