@@ -385,30 +385,41 @@ elif menu_selection == "Clustering":
             # Button to trigger AI analysis
             if "clustering_analysis" not in st.session_state:
                 if st.button("Run AI Analysis for Optimal Number of Clusters", type="primary"):
+                    progress_text = st.empty()
+                    progress_bar = st.progress(0)
+                    
                     # Calculate metrics if not already calculated
                     if "inertia_values" not in st.session_state or "silhouette_scores" not in st.session_state:
-                        with st.spinner("Calculating clustering metrics..."):
+                        progress_text.text("Krok 1/4: Počítám metriky pro clustering...")
+                        with st.spinner("Počítám clustering metriky..."):
                             st.session_state.inertia_values, st.session_state.silhouette_scores = calculate_clustering_metrics(features)
+                        progress_bar.progress(25)
                     
                     # Get AI recommendation
-                    with st.spinner("Getting AI analysis..."):
+                    progress_text.text("Krok 2/4: Získávám AI analýzu...")
+                    with st.spinner("Získávám AI doporučení..."):
                         st.session_state.clustering_analysis = get_optimal_clusters_from_ai(
                             st.session_state.inertia_values,
                             st.session_state.silhouette_scores
                         )
-                        
-                        # Extract recommended k range and set initial slider value
-                        analysis = st.session_state.clustering_analysis
-                        import re
-                        k_range = re.findall(r'Recommended k: (\d+)(?:-(\d+))?', analysis)
-                        if k_range:
-                            start = int(k_range[0][0])
-                            end = int(k_range[0][1]) if k_range[0][1] else start
-                            st.session_state.optimal_k = (start + end) // 2
-                        else:
-                            st.session_state.optimal_k = 5  # Default value if no range found
-                        
-                        # Perform initial clustering with recommended k
+                    progress_bar.progress(50)
+                    
+                    # Extract recommended k range and set initial slider value
+                    progress_text.text("Krok 3/4: Zpracovávám AI doporučení...")
+                    analysis = st.session_state.clustering_analysis
+                    import re
+                    k_range = re.findall(r'Recommended k: (\d+)(?:-(\d+))?', analysis)
+                    if k_range:
+                        start = int(k_range[0][0])
+                        end = int(k_range[0][1]) if k_range[0][1] else start
+                        st.session_state.optimal_k = (start + end) // 2
+                    else:
+                        st.session_state.optimal_k = 5  # Default value if no range found
+                    progress_bar.progress(75)
+                    
+                    # Perform initial clustering with recommended k
+                    progress_text.text("Krok 4/4: Provádím počáteční clustering...")
+                    with st.spinner("Provádím clustering..."):
                         cluster_labels = perform_kmeans_clustering(
                             st.session_state.normalized_kmeans_data,
                             st.session_state.optimal_k
@@ -437,8 +448,11 @@ elif menu_selection == "Clustering":
                             len(set(st.session_state.clustered_data['cluster']))
                         )
                         st.session_state.ai_validation = ai_evaluation
-                        
-                        st.rerun()
+                    
+                    progress_bar.progress(100)
+                    progress_text.text("✅ Analýza dokončena!")
+                    st.success("Analýza úspěšně dokončena! Výsledky se zobrazí níže.")
+                    st.rerun()
             
             # Display plots and analysis if available
             if "clustering_analysis" in st.session_state:
