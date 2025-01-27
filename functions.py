@@ -50,11 +50,18 @@ def get_openai_client():
         
         # If not in session state, try to get from environment/secrets
         if not api_key:
-            api_key = st.secrets.get("OPENAI_API_KEY")
+            try:
+                api_key = st.secrets["OPENAI_API_KEY"]
+            except:
+                st.error("OpenAI API key not found in session state or secrets")
+                return None
         
         # If we have an API key and client is not initialized
         if api_key and (client is None or client.api_key != api_key):
-            client = OpenAI(api_key=api_key)
+            client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.openai.com/v1"
+            )
             
         return client
     except Exception as e:
@@ -649,15 +656,15 @@ def generate_cluster_naming_prompt(data):
     cluster_summary = []
     clusters = sorted(data["cluster"].unique())
     
+    numeric_columns = ['total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
+                      'categories_bought', 'brands_bought', 'price_preference_range',
+                      'discount_sensitivity', 'luxury_preference_score']
+    
     for cluster in clusters:
         cluster_data = data[data["cluster"] == cluster]
         
         # Calculate average values for numeric columns
-        avg_values = cluster_data[
-            ["total_spent", "total_orders", "avg_order_value", "last_purchase_days_ago",
-             "categories_bought", "brands_bought", "price_preference_range",
-             "discount_sensitivity", "luxury_preference_score"]
-        ].mean()
+        avg_values = cluster_data[numeric_columns].mean()
         
         # Get dominant values for categorical columns
         dominant_category = cluster_data["top_category"].mode()[0]
@@ -715,13 +722,24 @@ def get_cluster_names_from_ai(data):
     
     # Prepare cluster statistics
     cluster_stats = {}
+    numeric_columns = ['total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
+                      'categories_bought', 'brands_bought', 'price_preference_range',
+                      'discount_sensitivity', 'luxury_preference_score']
+    categorical_columns = ['top_category', 'top_brand']
+    
     for i in range(len(set(data["cluster"]))):
         cluster_mask = data["cluster"] == i
         cluster_features = data[cluster_mask]
+        
+        # Calculate statistics only for numeric columns
+        mean_values = cluster_features[numeric_columns].mean().to_dict()
+        # Get mode for categorical columns
+        categorical_values = {col: cluster_features[col].mode().iloc[0] for col in categorical_columns}
+        
         cluster_stats[f"Cluster {i}"] = {
             "size": sum(cluster_mask),
-            "mean_values": cluster_features.mean(axis=0).tolist(),
-            "std_values": cluster_features.std(axis=0).tolist()
+            "mean_values": mean_values,
+            "categorical_values": categorical_values
         }
     
     # Generate prompt
