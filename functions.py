@@ -288,7 +288,7 @@ def generate_inventory_data(num_products=1000):
     # Calculate retail_price and profit_margin
     for i in range(num_products):
         cost_price = inventory_data["cost_price"][i]
-        profit_margin = round(random.uniform(0.5, 3.0), 2)  # Marže 50% až 300%
+        profit_margin = round(random.uniform(0.5, 3.0), 2)  # Margin 50% to 300%
         retail_price = round(cost_price * (1 + profit_margin), 2)
         inventory_data["retail_price"].append(retail_price)
         inventory_data["profit_margin"].append(round(profit_margin * 100, 2))
@@ -695,9 +695,9 @@ def generate_cluster_naming_prompt(data):
         cluster_summary.append(
             f"Cluster {cluster}:\n"
             f"- Average Values:\n"
-            f"  - Total Spent: ${avg_values['total_spent']:.2f}\n"
+            f"  - Total Spent: €{avg_values['total_spent']:.2f}\n"
             f"  - Total Orders: {avg_values['total_orders']:.1f}\n"
-            f"  - Average Order Value: ${avg_values['avg_order_value']:.2f}\n"
+            f"  - Average Order Value: €{avg_values['avg_order_value']:.2f}\n"
             f"  - Days Since Last Purchase: {avg_values['last_purchase_days_ago']:.1f}\n"
             f"  - Categories Bought: {avg_values['categories_bought']:.1f}\n"
             f"  - Brands Bought: {avg_values['brands_bought']:.1f}\n"
@@ -858,9 +858,9 @@ Product:
 - Name: {product_info['product_name']}
 - Category: {product_info['category']}
 - Brand: {product_info['brand']}
-- Original Price: ${product_info['retail_price']:.2f}
+- Original Price: €{product_info['retail_price']:.2f}
 - Discount: {discount_percent}%
-- Price After Discount: ${product_info['retail_price'] * (1 - discount_percent/100):.2f}
+- Price After Discount: €{product_info['retail_price'] * (1 - discount_percent/100):.2f}
 
 Available Customer Segments:
 """
@@ -869,8 +869,8 @@ Available Customer Segments:
         prompt += f"""
 Segment {stats['cluster']} ({stats['cluster_name']}):
 Statistics:
-- Average Spent: ${stats['avg_spent']:.2f}
-- Average Order Value: ${stats['avg_order']:.2f}
+- Average Spent: €{stats['avg_spent']:.2f}
+- Average Order Value: €{stats['avg_order']:.2f}
 - Discount Sensitivity (0-10): {stats['avg_discount_sensitivity']:.1f}
 - Top Category: {stats['top_category']}
 - Top Brand: {stats['top_brand']}
@@ -1063,14 +1063,14 @@ Product Details:
 - Name: {product_info['product_name']}
 - Brand: {product_info['brand']}
 - Category: {product_info['category']}
-- Original Price: ${product_info['original_price']:.2f}
+- Original Price: €{product_info['original_price']:.2f}
 - Discount: {product_info['discount_percent']}%
-- Final Price: ${product_info['discounted_price']:.2f}
+- Final Price: €{product_info['discounted_price']:.2f}
 
 Target Audience Preferences:
 - Preferred Brand: {customer_info['profile']['top_brand']}
 - Preferred Category: {customer_info['profile']['top_category']}
-- Average Purchase Value: ${customer_info['profile']['avg_order_value']:.2f}
+- Average Purchase Value: €{customer_info['profile']['avg_order_value']:.2f}
 - Last Purchase: {customer_info['profile']['last_purchase_days_ago']} days ago
 - Discount Sensitivity: {customer_info['profile']['discount_sensitivity']}
 
