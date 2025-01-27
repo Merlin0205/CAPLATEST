@@ -841,11 +841,14 @@ elif menu_selection == "Inventory & Customer Selection":
         st.session_state.selected_product_option = selected_product
 
         if selected_product:
-            # Check if product changed and reset email if needed
-            if ('last_selected_product' not in st.session_state or 
-                st.session_state.last_selected_product != selected_product):
+            # Reset email if product changed
+            if 'last_selected_product' not in st.session_state:
+                st.session_state.last_selected_product = None
+            
+            if st.session_state.last_selected_product != selected_product:
                 if 'email_content' in st.session_state:
                     del st.session_state.email_content
+                st.session_state.last_selected_customer = None  # Reset customer selection
                 st.session_state.last_selected_product = selected_product
 
             # Extract product name from the selection
@@ -937,6 +940,10 @@ elif menu_selection == "Inventory & Customer Selection":
                     st.session_state.last_analyzed_product = selected_product
                     st.session_state.last_analyzed_discount = discount_percent
                     
+                    # Reset customer selection when segment changes
+                    if 'last_selected_customer' in st.session_state:
+                        del st.session_state.last_selected_customer
+                    
                 except Exception as e:
                     st.error(f"Error analyzing customer segments: {str(e)}")
                     st.write("Debug info:")
@@ -970,13 +977,21 @@ elif menu_selection == "Inventory & Customer Selection":
                 # Customer selection from the chosen segment
                 st.markdown("#### 👤 Customer Selection")
                 
-                # Select best customers using the new function
-                top_customers = select_best_customers(
-                    cluster_data,
-                    st.session_state.selected_segment['cluster_name'],
-                    selected_product_info,
-                    discount_percent
-                )
+                # Select best customers only if we don't have them or if segment/product changed
+                if ('top_customers' not in st.session_state or
+                    st.session_state.get('last_analyzed_product') != selected_product or
+                    st.session_state.get('last_analyzed_discount') != discount_percent):
+                    
+                    top_customers = select_best_customers(
+                        cluster_data,
+                        st.session_state.selected_segment['cluster_name'],
+                        selected_product_info,
+                        discount_percent
+                    )
+                    st.session_state.top_customers = top_customers
+                
+                # Use cached top customers
+                top_customers = st.session_state.top_customers
                 
                 # Create dropdown for customer selection
                 selected_customer_id = st.selectbox(
@@ -988,9 +1003,11 @@ elif menu_selection == "Inventory & Customer Selection":
                 # Get selected customer details
                 best_customer = next(c for c in top_customers if str(c['customer_id']) == selected_customer_id.split()[1])
                 
-                # Check if customer changed and reset email if needed
-                if ('last_selected_customer' not in st.session_state or 
-                    st.session_state.last_selected_customer != best_customer['customer_id']):
+                # Reset email if customer changed
+                if 'last_selected_customer' not in st.session_state:
+                    st.session_state.last_selected_customer = None
+                
+                if st.session_state.last_selected_customer != best_customer['customer_id']:
                     if 'email_content' in st.session_state:
                         del st.session_state.email_content
                     st.session_state.last_selected_customer = best_customer['customer_id']
