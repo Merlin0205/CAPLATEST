@@ -251,8 +251,8 @@ def generate_inventory_data(num_products=1000):
         "category": [],
         "brand": [],
         "stock_quantity": [random.randint(0, 100) for _ in range(num_products)],
-        "cost_price": [round(random.uniform(50, 1000), 2) for _ in range(num_products)],  # Nejdřív generujeme cost_price
-        "retail_price": [],  # Retail price bude vypočítán z cost_price a marže
+        "cost_price": [round(random.uniform(50, 1000), 2) for _ in range(num_products)],  # First generate cost_price
+        "retail_price": [],  # Retail price will be calculated from cost_price and margin
         "profit_margin": []
     }
 
@@ -406,7 +406,7 @@ def evaluate_clusters_with_ai(features, labels, metrics):
         return response.choices[0].message.content
         
     except Exception as e:
-        error_msg = f"Neočekávaná chyba při komunikaci s OpenAI: {str(e)}"
+        error_msg = f"Unexpected error communicating with OpenAI: {str(e)}"
         print(f"Unexpected Error: {str(e)}")
         import traceback
         print(f"Full traceback: {traceback.format_exc()}")

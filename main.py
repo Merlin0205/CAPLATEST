@@ -176,7 +176,7 @@ elif menu_selection == "Data":
         with load_col:
             if 'data_loaded' not in st.session_state:
                 st.markdown('<div class="load-button">', unsafe_allow_html=True)
-                if st.button("Load Datasets"):
+                if st.button("Load Datasets", type="primary"):
                     # Generate and store original datasets
                     st.session_state.original_behavioral_data = generate_behavioral_data(num_customers=2000)
                     st.session_state.original_preference_data = generate_preference_data(num_customers=2000)
@@ -186,8 +186,13 @@ elif menu_selection == "Data":
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="loaded-button">', unsafe_allow_html=True)
-                st.button("✅ Load Datasets")
+                st.markdown('<div class="reset-button">', unsafe_allow_html=True)
+                if st.button("Reset All Data", type="secondary"):
+                    # Reset all session state variables
+                    for key in list(st.session_state.keys()):
+                        if key != "password_correct" and key != "openai_api_key" and key != "menu_selection":
+                            del st.session_state[key]
+                    st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
         
         # Show success messages if data is loaded
@@ -364,7 +369,7 @@ elif menu_selection == "Clustering":
     
     # Check if data section is completed
     if "normalized_kmeans_data" not in st.session_state:
-        st.warning("⚠️ Před pokračováním musíte dokončit sekci DATA.")
+        st.warning("⚠️ You must complete the DATA section before continuing.")
         st.stop()
 
     # Step 1: Determine Optimal Number of Clusters
@@ -487,7 +492,7 @@ elif menu_selection == "Clustering":
                 # Slider for selecting number of clusters
                 col1, col2, col3 = st.columns([1, 1, 1])
                 with col2:
-                    selected_k = st.slider("Počet clusterů (k)", 
+                    selected_k = st.slider("Number of clusters (k)", 
                                          min_value=2, 
                                          max_value=10,
                                          value=st.session_state.optimal_k)
@@ -716,8 +721,8 @@ elif menu_selection == "Clustering":
                                 height=400
                             )
                         except Exception as e:
-                            st.error(f"Chyba při zobrazování dat: {str(e)}")
-                            st.write("Dostupné sloupce:")
+                            st.error(f"Error displaying data: {str(e)}")
+                            st.write("Available columns:")
                             st.write(st.session_state.final_named_clusters.columns.tolist())
 
         # Final success message
@@ -744,7 +749,7 @@ elif menu_selection == "Inventory & Customer Selection":
     
     # Check if clustering section is completed
     if "final_named_clusters" not in st.session_state:
-        st.warning("⚠️ Před pokračováním musíte dokončit sekci CLUSTERING.")
+        st.warning("⚠️ You must complete the CLUSTERING section before continuing.")
         st.stop()
 
     # Filter and Sort section
@@ -926,7 +931,9 @@ elif menu_selection == "Inventory & Customer Selection":
             
             # Check if we already have segment analysis for this product and discount
             if ('selected_segment' not in st.session_state or 
-                st.session_state.get('last_analyzed_product') != selected_product or 
+                'last_analyzed_product' not in st.session_state or
+                'last_analyzed_discount' not in st.session_state or
+                st.session_state.get('last_analyzed_product') != selected_product_name or 
                 st.session_state.get('last_analyzed_discount') != discount_percent):
                 
                 try:
@@ -937,13 +944,13 @@ elif menu_selection == "Inventory & Customer Selection":
                         discount_percent
                     )
                     
-                    st.session_state.last_analyzed_product = selected_product
+                    st.session_state.last_analyzed_product = selected_product_name
                     st.session_state.last_analyzed_discount = discount_percent
                     
                     # Reset customer selection when segment changes
                     if 'last_selected_customer' in st.session_state:
                         del st.session_state.last_selected_customer
-                    
+                
                 except Exception as e:
                     st.error(f"Error analyzing customer segments: {str(e)}")
                     st.write("Debug info:")
@@ -979,7 +986,7 @@ elif menu_selection == "Inventory & Customer Selection":
                 
                 # Select best customers only if we don't have them or if segment/product changed
                 if ('top_customers' not in st.session_state or
-                    st.session_state.get('last_analyzed_product') != selected_product or
+                    st.session_state.get('last_analyzed_product') != selected_product_name or
                     st.session_state.get('last_analyzed_discount') != discount_percent):
                     
                     top_customers = select_best_customers(
@@ -1077,7 +1084,7 @@ elif menu_selection == "Email Design":
     
     # Check if inventory section is completed
     if "promotion_campaign" not in st.session_state:
-        st.warning("⚠️ Před pokračováním musíte dokončit sekci INVENTORY & CUSTOMER SELECTION.")
+        st.warning("⚠️ You must complete the INVENTORY & CUSTOMER SELECTION section before continuing.")
         st.stop()
 
     # Get data from session state
