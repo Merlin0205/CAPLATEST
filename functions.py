@@ -16,6 +16,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 import time
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import StandardScaler
 
 # Load environment variables
 load_dotenv()
@@ -472,17 +474,17 @@ def perform_kmeans_clustering(data, n_clusters):
     """
     Performs K-means clustering on the input data.
     Args:
-        data: DataFrame with normalized features
+        data: DataFrame with already normalized features
         n_clusters: Number of clusters to create
     Returns:
         numpy.ndarray: Cluster assignments
     """
-    # Get numeric columns for clustering (excluding customer_id)
+    # Get all columns for clustering (including already normalized categorical ones)
     numeric_columns = ['price_preference_range', 'discount_sensitivity', 'luxury_preference_score',
                       'total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
-                      'categories_bought', 'brands_bought']
+                      'categories_bought', 'brands_bought', 'top_category', 'top_brand']
     
-    # Get data for clustering
+    # Get data for clustering (already normalized)
     clustering_data = data[numeric_columns]
     
     # Initialize and fit KMeans
@@ -494,18 +496,37 @@ def perform_kmeans_clustering(data, n_clusters):
 def create_clustered_datasets(normalized_data, cluster_labels, original_combined_data, original_preference_data, original_behavioral_data):
     """
     Creates two versions of clustered datasets: normalized and denormalized with original values.
-    Args:
-        normalized_data: DataFrame with normalized features
-        cluster_labels: Cluster assignments from K-means
-        original_combined_data: Original combined data before normalization
-        original_preference_data: Original preference data with text values
-        original_behavioral_data: Original behavioral data with emails
-    Returns:
-        tuple: (normalized dataset with clusters, denormalized dataset with clusters)
     """
     # Create normalized dataset with clusters
     clustered_data = normalized_data.copy()
+    
+    # Normalize categorical columns if they haven't been normalized yet
+    if clustered_data['top_category'].dtype == 'object' or clustered_data['top_brand'].dtype == 'object':
+        # Normalize top_category
+        le_category = LabelEncoder()
+        clustered_data['top_category'] = le_category.fit_transform(clustered_data['top_category'])
+        
+        # Normalize top_brand
+        le_brand = LabelEncoder()
+        clustered_data['top_brand'] = le_brand.fit_transform(clustered_data['top_brand'])
+        
+        # Store the encoders in session state
+        st.session_state.label_encoders = {
+            'category': le_category,
+            'brand': le_brand
+        }
+    
+    # Normalize all numeric columns
+    numeric_columns = ['price_preference_range', 'discount_sensitivity', 'luxury_preference_score',
+                      'total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
+                      'categories_bought', 'brands_bought', 'top_category', 'top_brand']
+    
+    scaler = StandardScaler()
+    clustered_data[numeric_columns] = scaler.fit_transform(clustered_data[numeric_columns])
+    
+    # Add cluster labels
     clustered_data['cluster'] = cluster_labels
+    
     # Reorder columns to show cluster first
     cols = ['cluster'] + [col for col in clustered_data.columns if col != 'cluster']
     clustered_data = clustered_data[cols]
@@ -516,8 +537,7 @@ def create_clustered_datasets(normalized_data, cluster_labels, original_combined
         'cluster': cluster_labels
     })
     
-    # Create denormalized dataset with clusters
-    # 1. Merge with original combined data
+    # Create denormalized dataset with clusters (for display and analysis)
     final_clustered_data = pd.merge(
         original_combined_data,
         cluster_assignments,
@@ -525,7 +545,7 @@ def create_clustered_datasets(normalized_data, cluster_labels, original_combined
         how='inner'
     )
     
-    # 2. Get original category and brand values
+    # Add original category and brand values
     final_clustered_data = pd.merge(
         final_clustered_data,
         original_preference_data[['customer_id', 'top_category', 'top_brand']],
@@ -534,7 +554,7 @@ def create_clustered_datasets(normalized_data, cluster_labels, original_combined
         suffixes=('_numeric', '')
     )
     
-    # 3. Add email from original behavioral data
+    # Add email from original behavioral data
     final_clustered_data = pd.merge(
         final_clustered_data,
         original_behavioral_data[['customer_id', 'email']],
@@ -542,7 +562,7 @@ def create_clustered_datasets(normalized_data, cluster_labels, original_combined
         how='left'
     )
     
-    # 4. Drop numeric columns and reorder
+    # Drop numeric category/brand columns and reorder
     final_clustered_data = final_clustered_data.drop(
         columns=['top_category_numeric', 'top_brand_numeric']
     )
@@ -610,67 +630,64 @@ def plot_validation_metrics(distance_matrix, features, labels, feature_names):
     plt.tight_layout()
     return fig
 
-def evaluate_cluster_validation(distance_matrix, features, num_clusters):
+def evaluate_cluster_validation(distance_matrix, features, n_clusters):
     """
-    Uses OpenAI to evaluate if the segmentation is usable.
-    Args:
-        distance_matrix: Matrix of distances between clusters
-        features: DataFrame with features (not used)
-        num_clusters: Number of clusters
-    Returns:
-        dict: Basic AI evaluation of segmentation usability
+    Uses AI to evaluate clustering validation metrics and provide insights.
     """
-    avg_distance = np.mean(distance_matrix[distance_matrix > 0])
-    min_distance = np.min(distance_matrix[distance_matrix > 0])
-    max_distance = np.max(distance_matrix)
-    
+    client = get_openai_client()
+    if not client:
+        return "Error: OpenAI client not available"
+
     prompt = f"""
-    You are an expert in customer segmentation using K-means clustering.
-    Evaluate only the usability of segmentation based on distances between segments:
+    As a clustering expert, evaluate these customer segmentation results:
 
-    Metrics:
-    - Average distance: {avg_distance:.3f}
-    - Minimum distance: {min_distance:.3f}
-    - Maximum distance: {max_distance:.3f}
-    - Number of segments: {num_clusters}
-    
-    Provide ONLY:
-    1. Whether the segments are sufficiently different for use in marketing
-    2. Brief justification based on numbers
-    
-    Format the response as:
-    SEGMENTATION USABILITY:
-    [EXCELLENT 😀 / GOOD 🙂 / AVERAGE 😐 / INSUFFICIENT 😟]
+    METRICS:
+    1. Number of segments: {n_clusters}
+    2. Segment separation:
+       - Average distance: {np.mean(distance_matrix):.3f}
+       - Min distance: {np.min(distance_matrix[distance_matrix > 0]):.3f}
+       - Max distance: {np.max(distance_matrix):.3f}
+    3. Feature patterns: {features.mean(axis=0)}
 
-    JUSTIFICATION:
-    [1-2 sentences explaining the rating based on numbers]
+    REQUIREMENTS:
+    1. First line must be exactly:
+    SEGMENTATION QUALITY: [one of: "INSUFFICIENT ⚠️", "USABLE ✓", "OPTIMAL ★"]
+
+    2. On next line:
+    - For INSUFFICIENT: Explain why and suggest specific changes
+    - For USABLE: Explain why and suggest possible improvements
+    - For OPTIMAL: Explain why, no suggestions needed
+
+    EXAMPLE RESPONSES:
+
+    Example 1:
+    SEGMENTATION QUALITY: INSUFFICIENT ⚠️
+    Segments show significant overlap (avg distance: 0.5), making customer targeting unreliable - try reducing to 3 segments.
+
+    Example 2:
+    SEGMENTATION QUALITY: USABLE ✓
+    Segments show acceptable separation (avg distance: 1.2) - consider testing with 5 segments for potential improvement.
+
+    Example 3:
+    SEGMENTATION QUALITY: OPTIMAL ★
+    Strong segment separation (avg distance: 2.1) with clear customer behavior patterns in each group.
     """
-    
+
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are an expert in evaluating segmentation quality. Provide concise and clear evaluations."},
+                {
+                    "role": "system", 
+                    "content": "You are a customer segmentation expert. Provide clear, actionable evaluations."
+                },
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3
         )
-        
-        return {
-            'analysis': response.choices[0].message.content,
-            'metrics': {
-                'avg_distance': avg_distance,
-                'min_distance': min_distance,
-                'max_distance': max_distance
-            }
-        }
-        
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Error in AI evaluation: {str(e)}")
-        return {
-            'analysis': "Failed to get AI analysis. Please try again later.",
-            'metrics': None
-        }
+        return f"Error during AI evaluation: {str(e)}"
 
 def generate_cluster_naming_prompt(data):
     """Generate a prompt for OpenAI to name clusters based on customer behavior."""
@@ -824,114 +841,113 @@ def create_named_clustered_dataset(clustered_data, cluster_names):
     return named_clusters
 
 def select_best_segment(cluster_data, product_info, discount_percent):
-    """
-    Selects the best segment for product promotion.
-    Args:
-        cluster_data: DataFrame with cluster data
-        product_info: Dictionary with product information
-        discount_percent: Discount percentage
-    Returns:
-        dict: Information about selected segment
-    """
-    cluster_stats = []
-    
-    for cluster_id in cluster_data['cluster'].unique():
-        cluster_customers = cluster_data[cluster_data['cluster'] == cluster_id]
-        cluster_info = cluster_customers.iloc[0]
-        
-        stats = {
-            'cluster': cluster_id,
-            'cluster_name': cluster_info['cluster_name'],
-            'avg_spent': cluster_customers['total_spent'].mean(),
-            'avg_order': cluster_customers['avg_order_value'].mean(),
-            'avg_discount_sensitivity': cluster_customers['discount_sensitivity'].mean(),
-            'top_category': cluster_customers['top_category'].mode().iloc[0],
-            'top_brand': cluster_customers['top_brand'].mode().iloc[0],
-            'total_customers': len(cluster_customers)
+    """Selects the best customer segment for the given product and discount."""
+    client = get_openai_client()
+    if not client:
+        return {
+            "cluster_name": "Error",
+            "match_score": 0,
+            "cluster_explanation": "OpenAI API key not available. Please check your configuration.",
+            "stats": {
+                "avg_spent": 0,
+                "avg_order": 0,
+                "top_brand": "N/A",
+                "top_category": "N/A"
+            }
         }
-        cluster_stats.append(stats)
-    
+
+    # Create segment summaries
+    segments = {}
+    for cluster_name in cluster_data['cluster_name'].unique():
+        segment_data = cluster_data[cluster_data['cluster_name'] == cluster_name]
+        
+        # Calculate segment statistics
+        stats = {
+            'avg_spent': segment_data['total_spent'].mean(),
+            'avg_order': segment_data['avg_order_value'].mean(),
+            'top_brand': segment_data['top_brand'].mode().iloc[0],
+            'top_category': segment_data['top_category'].mode().iloc[0],
+            'avg_discount_sensitivity': segment_data['discount_sensitivity'].mean(),
+            'size': len(segment_data)
+        }
+        
+        segments[cluster_name] = {
+            'stats': stats,
+            'explanation': segment_data['cluster_explanation'].iloc[0]
+        }
+
     # Prepare prompt for AI
-    prompt = f"""Analyze the following product and customer segments and select the most suitable segment for promotion:
+    prompt = f"""Analyze these customer segments for promoting this product:
 
 Product:
 - Name: {product_info['product_name']}
 - Category: {product_info['category']}
 - Brand: {product_info['brand']}
-- Original Price: €{product_info['retail_price']:.2f}
+- Price: €{product_info['retail_price']:.2f}
 - Discount: {discount_percent}%
-- Price After Discount: €{product_info['retail_price'] * (1 - discount_percent/100):.2f}
+- Final Price: €{product_info['retail_price'] * (1 - discount_percent/100):.2f}
 
-Available Customer Segments:
+Customer Segments:
 """
     
-    for stats in cluster_stats:
+    for name, data in segments.items():
         prompt += f"""
-Segment {stats['cluster']} ({stats['cluster_name']}):
-Statistics:
-- Average Spent: €{stats['avg_spent']:.2f}
-- Average Order Value: €{stats['avg_order']:.2f}
-- Discount Sensitivity (0-10): {stats['avg_discount_sensitivity']:.1f}
-- Top Category: {stats['top_category']}
-- Top Brand: {stats['top_brand']}
-- Total Customers: {stats['total_customers']}
+{name}:
+- Average Spent: €{data['stats']['avg_spent']:.2f}
+- Average Order: €{data['stats']['avg_order']:.2f}
+- Top Category: {data['stats']['top_category']}
+- Top Brand: {data['stats']['top_brand']}
+- Customers: {data['stats']['size']}
+- Profile: {data['explanation']}
 """
 
     prompt += """
-Select the most suitable segment and explain why. Answer in the following format:
-SEGMENT: [segment number] (just the number)
-SCORE: [score 0-100]
-JUSTIFICATION: Explain in a single paragraph (max 70 words) why this segment is the best choice."""
+Select the best segment for this product promotion.
+Format your response exactly as:
+SEGMENT: [segment name]
+SCORE: [0-100]
+REASON: [1-2 sentences why this segment is best]
+"""
 
-    # Get AI response
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are an expert marketing analyst helping to select the most suitable customer segment for product promotion. When specifying the segment, use only the segment number. Keep your justification concise - maximum 70 words in a single paragraph."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7
-    )
-    
-    ai_response = response.choices[0].message.content
-    
-    # Parse AI response
-    lines = ai_response.split('\n')
-    selected_segment = None
-    ai_score = 0
-    ai_explanation = ""
-    
-    for line in lines:
-        if line.startswith('SEGMENT:'):
-            segment_text = line.replace('SEGMENT:', '').strip()
-            numbers = re.findall(r'\d+', segment_text)
-            if numbers:
-                selected_segment = int(numbers[0])
-        elif line.startswith('SCORE:'):
-            ai_score = int(line.replace('SCORE:', '').strip())
-        elif line.startswith('JUSTIFICATION:'):
-            ai_explanation = line.replace('JUSTIFICATION:', '').strip()
-        elif line.strip() and not line.startswith(('SEGMENT:', 'SCORE:')):
-            if ai_explanation:
-                ai_explanation += " " + line.strip()
-            else:
-                ai_explanation = line.strip()
-    
-    if selected_segment is None:
-        selected_segment = cluster_stats[0]['cluster']
-    
-    # Find the selected cluster data
-    best_cluster = next(
-        (cluster for cluster in cluster_stats if cluster['cluster'] == selected_segment),
-        cluster_stats[0]  # Fallback to first cluster if not found
-    )
-    
-    return {
-        "cluster_name": best_cluster['cluster_name'],
-        "match_score": ai_score,
-        "cluster_explanation": ai_explanation,
-        "stats": best_cluster
-    }
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a marketing expert selecting customer segments for targeted promotions."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+
+        # Parse response
+        lines = response.choices[0].message.content.split('\n')
+        selected_name = lines[0].replace('SEGMENT:', '').strip()
+        score = int(lines[1].replace('SCORE:', '').strip())
+        reason = ' '.join(lines[2:]).replace('REASON:', '').strip()
+
+        # Get segment stats
+        selected_segment = segments[selected_name]
+
+        return {
+            "cluster_name": selected_name,
+            "match_score": score,
+            "cluster_explanation": reason,
+            "stats": selected_segment['stats']
+        }
+
+    except Exception as e:
+        st.error(f"Error selecting segment: {str(e)}")
+        return {
+            "cluster_name": "Error",
+            "match_score": 0,
+            "cluster_explanation": f"Error selecting segment: {str(e)}",
+            "stats": {
+                "avg_spent": 0,
+                "avg_order": 0,
+                "top_brand": "N/A",
+                "top_category": "N/A"
+            }
+        }
 
 def select_best_customers(cluster_data, cluster_name, product_info, discount_percent):
     """

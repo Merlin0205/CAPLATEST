@@ -118,6 +118,11 @@ menu_selection = st.sidebar.radio(
     key="menu_selection"
 )
 
+# Na začátku souboru přidat konstantu
+CLUSTERING_COLUMNS = ['price_preference_range', 'discount_sensitivity', 'luxury_preference_score',
+                     'total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
+                     'categories_bought', 'brands_bought', 'top_category', 'top_brand']
+
 if menu_selection == "Instructions":
     st.title("📚 User Guide")
     st.write("Welcome to the Customer Data Analysis Tool!")
@@ -303,22 +308,20 @@ elif menu_selection == "Data":
             )
             
             # Normalize data for K-means
-            from sklearn.preprocessing import StandardScaler
-            
+            from sklearn.preprocessing import StandardScaler, LabelEncoder
+
             # Select numeric columns for normalization
-            numeric_columns = ['price_preference_range', 'discount_sensitivity', 'luxury_preference_score',
-                             'total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
-                             'categories_bought', 'brands_bought']
-            
-            # Create scaler
-            scaler = StandardScaler()
-            
+            numeric_columns = CLUSTERING_COLUMNS
+
             # Create copy for normalization
             st.session_state.normalized_kmeans_data = st.session_state.combined_raw_data.copy()
-            
-            # Normalize numeric columns
+
+            # Create scaler
+            scaler = StandardScaler()
+
+            # Normalize all columns
             st.session_state.normalized_kmeans_data[numeric_columns] = scaler.fit_transform(
-                st.session_state.combined_raw_data[numeric_columns]
+                st.session_state.normalized_kmeans_data[numeric_columns]
             )
             
             st.success("✅ Datasets merged and normalized for K-means analysis")
@@ -326,7 +329,7 @@ elif menu_selection == "Data":
             
             show_final_data = st.toggle("Show Final Dataset", value=False)
             if show_final_data:
-                st.subheader(f"Final Dataset for K-means Clustering -- Number of records: {len(st.session_state.normalized_kmeans_data)}")
+                st.subheader("Normalized Data for K-means")
                 st.dataframe(
                     st.session_state.normalized_kmeans_data,
                     use_container_width=True,
@@ -380,7 +383,11 @@ elif menu_selection == "Clustering":
             if show_data:
                 st.dataframe(st.session_state.normalized_kmeans_data)
             
-            features = st.session_state.normalized_kmeans_data.values
+            # Použijeme pouze relevantní sloupce pro clustering
+            numeric_columns = CLUSTERING_COLUMNS
+
+            # Použijeme pouze relevantní sloupce pro clustering
+            features = st.session_state.normalized_kmeans_data[numeric_columns].values
             
             # Button to trigger AI analysis
             if "clustering_analysis" not in st.session_state:
@@ -442,12 +449,15 @@ elif menu_selection == "Clustering":
                         st.session_state.validation_metrics = validation_metrics
                         
                         # Get initial AI evaluation
-                        ai_evaluation = evaluate_cluster_validation(
-                            validation_metrics['distance_matrix'],
-                            validation_metrics['features'],
-                            len(set(st.session_state.clustered_data['cluster']))
-                        )
-                        st.session_state.ai_validation = ai_evaluation
+                        try:
+                            ai_evaluation = evaluate_cluster_validation(
+                                validation_metrics['distance_matrix'],
+                                validation_metrics['features'],
+                                st.session_state.optimal_k
+                            )
+                            st.session_state.ai_validation = ai_evaluation
+                        except Exception as e:
+                            st.error(f"Error during AI evaluation: {str(e)}")
                     
                     progress_bar.progress(100)
                     progress_text.text("✅ Analysis completed!")
@@ -494,55 +504,60 @@ elif menu_selection == "Clustering":
                 # Slider for selecting number of clusters
                 col1, col2, col3 = st.columns([1, 1, 1])
                 with col2:
-                    selected_k = st.slider("Number of clusters (k)", 
-                                         min_value=2, 
-                                         max_value=10,
-                                         value=st.session_state.optimal_k,
-                                         key="cluster_slider")
-                    
-                    # Only update if the value actually changed
-                    if "last_selected_k" not in st.session_state:
-                        st.session_state.last_selected_k = selected_k
-                    
-                    if selected_k != st.session_state.last_selected_k:
-                        st.session_state.last_selected_k = selected_k
-                        st.session_state.optimal_k = selected_k
-                        
-                        # Reset cluster names when changing number of clusters
-                        if 'cluster_names' in st.session_state:
-                            del st.session_state.cluster_names
-                        if 'final_named_clusters' in st.session_state:
-                            del st.session_state.final_named_clusters
-                        
-                        # Perform clustering with new k
-                        cluster_labels = perform_kmeans_clustering(
-                            st.session_state.normalized_kmeans_data,
-                            selected_k
-                        )
-                        
-                        # Update clustered datasets
-                        st.session_state.clustered_data, st.session_state.final_clustered_data = create_clustered_datasets(
-                            st.session_state.normalized_kmeans_data,
-                            cluster_labels,
-                            st.session_state.combined_raw_data,
-                            st.session_state.original_preference_data,
-                            st.session_state.original_behavioral_data
-                        )
-                        
-                        # Calculate new validation metrics
-                        validation_metrics = calculate_validation_metrics(
-                            st.session_state.clustered_data,
-                            st.session_state.clustered_data['cluster']
-                        )
-                        st.session_state.validation_metrics = validation_metrics
-                        
-                        # Get new AI evaluation
-                        ai_evaluation = evaluate_cluster_validation(
-                            validation_metrics['distance_matrix'],
-                            validation_metrics['features'],
-                            len(set(st.session_state.clustered_data['cluster']))
-                        )
-                        st.session_state.ai_validation = ai_evaluation
+                    n_clusters = st.number_input(
+                        "Number of clusters",
+                        min_value=2,
+                        max_value=10,
+                        value=st.session_state.get('optimal_k', 5),
+                        step=1,
+                        key='n_clusters'
+                    )
+
+                    # Přidáme kontrolu změny hodnoty
+                    if 'previous_n_clusters' not in st.session_state:
+                        st.session_state.previous_n_clusters = n_clusters
+
+                    # Pokud se změnil počet clusterů
+                    if st.session_state.previous_n_clusters != n_clusters:
+                        st.session_state.optimal_k = n_clusters  # Aktualizujeme optimal_k
+                        with st.spinner("Updating clustering..."):
+                            # Přepočítáme clustery
+                            cluster_labels = perform_kmeans_clustering(
+                                st.session_state.normalized_kmeans_data,
+                                n_clusters
+                            )
+                            
+                            # Aktualizujeme datasety
+                            st.session_state.clustered_data, st.session_state.final_clustered_data = create_clustered_datasets(
+                                st.session_state.normalized_kmeans_data,
+                                cluster_labels,
+                                st.session_state.combined_raw_data,
+                                st.session_state.original_preference_data,
+                                st.session_state.original_behavioral_data
+                            )
+                            
+                            # Přepočítáme validační metriky
+                            st.session_state.validation_metrics = calculate_validation_metrics(
+                                st.session_state.clustered_data,
+                                st.session_state.clustered_data['cluster']
+                            )
+                            
+                            # Get new AI evaluation
+                            try:
+                                ai_evaluation = evaluate_cluster_validation(
+                                    st.session_state.validation_metrics['distance_matrix'],
+                                    st.session_state.validation_metrics['features'],
+                                    n_clusters
+                                )
+                                st.session_state.ai_validation = ai_evaluation
+                            except Exception as e:
+                                st.error(f"Error during AI evaluation: {str(e)}")
+                            
+                            # Aktualizujeme předchozí hodnotu
+                            st.session_state.previous_n_clusters = n_clusters
+                            
+                            # Vynutíme překreslení
+                            st.rerun()
 
     # Step 2: K-means Clustering
     if "clustering_analysis" in st.session_state:
@@ -633,10 +648,10 @@ elif menu_selection == "Clustering":
                     plt.close()
                     
                     st.markdown("### 🤖 AI Segmentation Analysis")
-                    if st.session_state.ai_validation['analysis'] != "Failed to get AI analysis. Please try again later.":
-                        st.markdown(st.session_state.ai_validation['analysis'])
+                    if st.session_state.ai_validation != "Error during AI evaluation":
+                        st.markdown(st.session_state.ai_validation)
                     else:
-                        st.error(st.session_state.ai_validation['analysis'])
+                        st.error(st.session_state.ai_validation)
                 else:
                     st.info("Please adjust the number of clusters to perform validation.")
 
@@ -1085,7 +1100,7 @@ elif menu_selection == "Inventory & Customer Selection":
                     if st.button("Continue to Email Design ➡️", type="primary", use_container_width=True):
                         st.session_state['go_to_email'] = True
                         st.rerun()
-    
+                        
 elif menu_selection == "Email Design":
     st.title("✉️ Email Campaign Design")
     
