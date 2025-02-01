@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from secure_config import verify_password, get_api_key
 from openai import OpenAI
 from streamlit_quill import st_quill
+import os
 
 # Page settings must be the first Streamlit command
 st.set_page_config(layout="wide", page_title="Customer Data Analysis")
@@ -110,18 +111,30 @@ except Exception as e:
 
 # Sidebar menu
 if 'menu_selection' not in st.session_state:
-    st.session_state.menu_selection = "Instructions"
-
-menu_selection = st.sidebar.radio(
-    "Navigation",
-    ["Instructions", "Data", "Clustering", "Inventory & Customer Selection", "Email Design"],
-    key="menu_selection"
-)
+    st.session_state.menu_selection = "Business Logic"
 
 # Na začátku souboru přidat konstantu
 CLUSTERING_COLUMNS = ['price_preference_range', 'discount_sensitivity', 'luxury_preference_score',
                      'total_spent', 'total_orders', 'avg_order_value', 'last_purchase_days_ago',
                      'categories_bought', 'brands_bought', 'top_category', 'top_brand']
+
+menu_selection = st.sidebar.radio(
+    "Navigation",
+    ["Business Logic", "Instructions", "Data", "Clustering", "Inventory & Customer Selection", "Email Design"],
+    key="menu_selection"
+)
+
+if menu_selection == "Business Logic":
+    st.title("📘 Business Logic Documentation")
+    
+    try:
+        with open("BUSINESS_LOGIC_EN.md", "r", encoding="utf-8") as f:
+            content = f.read()
+            st.markdown(content)
+    except Exception as e:
+        st.error(f"Error loading documentation: {str(e)}")
+        st.write("Current working directory:", os.getcwd())
+        st.write("File path:", os.path.abspath("BUSINESS_LOGIC_EN.md"))
 
 if menu_selection == "Instructions":
     st.title("📚 User Guide")
