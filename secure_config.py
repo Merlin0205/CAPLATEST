@@ -17,7 +17,7 @@ def get_password_hash() -> str:
     except:
         pass
         
-    # Default hash for password "MARCH"
+    
     return "5ff171d62e4d576f6e870020a480f1acac85e8b3f9a2950fd27c73cd632e1897"
 
 def verify_password(password: str) -> bool:
