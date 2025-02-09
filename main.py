@@ -255,12 +255,13 @@ elif menu_selection == "Data":
             
             # Display problems and their resolution
             for problem in problems:
-                st.warning(f"• {problem} --- ✅ resolved")
+                st.warning(f"• {problem}")
             
             if not problems:
                 st.success("✅ No issues found in the dataset")
             
-            st.success(f"📊 Records after cleaning: {len(st.session_state.clean_behavioral_data)}")
+            removed_records = len(st.session_state.original_behavioral_data) - len(st.session_state.clean_behavioral_data)
+            st.success(f"📊 Records after cleaning: {len(st.session_state.clean_behavioral_data)} --- {removed_records} records were removed due to incomplete or invalid data that could affect segmentation accuracy")
 
         # Data Privacy section
         with st.expander("🔒 Data Privacy & Anonymization ✅ COMPLETED", expanded=False):
@@ -862,12 +863,18 @@ elif menu_selection == "Inventory & Customer Selection":
             for _, row in filtered_df.iterrows()
         ]
 
-        # Find index of selected product, default to 0 if not found
+        # Přidáme prázdnou možnost na začátek
+        product_options = ["Select a product..."] + product_options
+
+        # Find index of selected product, default to None if not found
         try:
-            selected_index = product_options.index(st.session_state.selected_product_option) if st.session_state.selected_product_option else 0
+            selected_index = (product_options.index(st.session_state.selected_product_option) 
+                            if st.session_state.selected_product_option and 
+                            st.session_state.selected_product_option != "Select a product..." 
+                            else 0)
         except ValueError:
             selected_index = 0
-            st.session_state.selected_product_option = None
+            st.session_state.selected_product_option = "Select a product..."
 
         # Product selection
         selected_product = st.selectbox(
@@ -880,7 +887,8 @@ elif menu_selection == "Inventory & Customer Selection":
         # Update selected product option
         st.session_state.selected_product_option = selected_product
 
-        if selected_product:
+        # Pokračujeme pouze pokud je vybrán skutečný produkt
+        if selected_product and selected_product != "Select a product...":
             # Reset email if product changed
             if 'last_selected_product' not in st.session_state:
                 st.session_state.last_selected_product = None
@@ -888,8 +896,14 @@ elif menu_selection == "Inventory & Customer Selection":
             if st.session_state.last_selected_product != selected_product:
                 if 'email_content' in st.session_state:
                     del st.session_state.email_content
+                if 'selected_segment' in st.session_state:
+                    del st.session_state.selected_segment
+                if 'top_customers' in st.session_state:
+                    del st.session_state.top_customers
                 st.session_state.last_selected_customer = None  # Reset customer selection
                 st.session_state.last_selected_product = selected_product
+                st.session_state.last_analyzed_product = None  # Reset last analyzed product
+                st.session_state.last_analyzed_discount = None  # Reset last analyzed discount
 
             # Extract product name from the selection
             selected_product_name = selected_product.split(" | ")[0]
@@ -930,14 +944,14 @@ elif menu_selection == "Inventory & Customer Selection":
                 discounted_price = original_price * (1 - discount_percent/100)
                 original_profit = original_price - selected_product_info['cost_price']
                 new_profit = discounted_price - selected_product_info['cost_price']
-                original_margin = (original_profit / original_price) * 100
-                new_margin = (new_profit / discounted_price) * 100
+                original_profit_margin = ((original_price - selected_product_info['cost_price']) / selected_product_info['cost_price']) * 100
+                new_profit_margin = ((discounted_price - selected_product_info['cost_price']) / selected_product_info['cost_price']) * 100
                 
                 st.info("Discount Analysis")
                 st.write(f"**Original Price:** €{original_price:.2f}")
                 st.write(f"**Discounted Price:** €{discounted_price:.2f}")
-                st.write(f"**Original Profit:** €{original_profit:.2f} ({original_margin:.1f}%)")
-                st.write(f"**New Profit:** €{new_profit:.2f} ({new_margin:.1f}%)")
+                st.write(f"**Original Profit:** €{original_profit:.2f} (Margin: {original_profit_margin:.1f}% over cost)")
+                st.write(f"**New Profit:** €{new_profit:.2f} (Margin: {new_profit_margin:.1f}% over cost)")
             
             # Store promotion details in session state
             promotion_details = {
@@ -950,8 +964,8 @@ elif menu_selection == "Inventory & Customer Selection":
                 "discounted_price": discounted_price,
                 "original_profit": original_profit,
                 "new_profit": new_profit,
-                "original_margin": original_margin,
-                "new_margin": new_margin,
+                "original_margin": original_profit_margin,
+                "new_margin": new_profit_margin,
                 "stock_quantity": selected_product_info['stock_quantity']
             }
             st.session_state.promotion_details = promotion_details
@@ -994,15 +1008,25 @@ elif menu_selection == "Inventory & Customer Selection":
                     st.stop()
             
             # Display AI selection results
-            st.markdown("#### 🎯 Selected Customer Cluster")
+            st.markdown("### 🎯 Selected Customer Cluster")
+            st.markdown(f"""
+            ## Selected Segment: {st.session_state.selected_segment['cluster_name']}
+            ### Match Score: {st.session_state.selected_segment['match_score']}%
+            """)
+            
             col1, col2 = st.columns(2)
             with col1:
                 st.success(f"""
-                **{st.session_state.selected_segment['cluster_name']}**
-                Match: {st.session_state.selected_segment['match_score']}%
-
-                Why this cluster:
+                **Why this cluster?**
                 {st.session_state.selected_segment['cluster_explanation']}
+                
+                **Match Score Criteria:**
+                Our AI analyzes multiple factors to calculate the match percentage:
+                - Product category alignment with segment preferences
+                - Price point compatibility with segment's average order value
+                - Brand affinity within the segment
+                - Discount sensitivity match
+                - Historical purchase patterns
                 """)
             
             with col2:
@@ -1017,7 +1041,7 @@ elif menu_selection == "Inventory & Customer Selection":
             
             try:
                 # Customer selection from the chosen segment
-                st.markdown("#### 👤 Customer Selection")
+                st.markdown("### 👤 Customer Selection")
                 
                 # Select best customers only if we don't have them or if segment/product changed
                 if ('top_customers' not in st.session_state or
@@ -1057,16 +1081,19 @@ elif menu_selection == "Inventory & Customer Selection":
                 # Display selected customer
                 col1, col2 = st.columns(2)
                 with col1:
+                    scores = best_customer['scores_breakdown']
                     st.success(f"""
                     🏆 Best Match in Segment
                     Customer ID: {best_customer['customer_id']} | Total Match: {best_customer['score']}%
                     
-                    **Why this customer?**
-                    ✓ Preferred Category (+30 points)
-                    ✓ Above Average Spending (+10 points)
-                    ✓ Active Customer (+10 points)
+                    Why this customer?
+                    • Brand Affinity: {scores.get('brand', 0)} points
+                    • Category Match: {scores.get('category', 0)} points
+                    • Price Alignment: {scores.get('price', 0)} points
+                    • Discount Sensitivity: {scores.get('discount', 0)} points
+                    • Customer Value: {scores.get('value', 0)} points
                     """)
-                
+
                 with col2:
                     st.info("Customer Profile:")
                     st.write(f"""

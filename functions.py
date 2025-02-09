@@ -718,9 +718,9 @@ def generate_cluster_naming_prompt(data):
             f"  - Days Since Last Purchase: {avg_values['last_purchase_days_ago']:.1f}\n"
             f"  - Categories Bought: {avg_values['categories_bought']:.1f}\n"
             f"  - Brands Bought: {avg_values['brands_bought']:.1f}\n"
-            f"  - Price Preference (1=Low, 2=Mid, 3=High): {avg_values['price_preference_range']:.1f}\n"
-            f"  - Discount Sensitivity (0=Low, 1=High): {avg_values['discount_sensitivity']:.2f}\n"
-            f"  - Luxury Preference (1-5): {avg_values['luxury_preference_score']:.1f}\n"
+            f"  - Price Preference Range (1=Budget, 2=Regular, 3=Premium): {avg_values['price_preference_range']:.1f}\n"
+            f"  - Discount Sensitivity (0.0=Never uses discounts, 1.0=Always seeks discounts): {avg_values['discount_sensitivity']:.2f}\n"
+            f"  - Luxury Preference (1=Basic products, 5=Luxury products): {avg_values['luxury_preference_score']:.1f}\n"
             f"- Most Common Category: {dominant_category}\n"
             f"- Most Common Brand: {dominant_brand}\n"
         )
@@ -732,8 +732,8 @@ The data shows:
 - Spending patterns (total spent, orders, average value)
 - Shopping frequency (days since last purchase)
 - Shopping variety (categories and brands bought)
-- Price sensitivity (1=Low price, 2=Mid price, 3=High price)
-- Discount seeking behavior (0=Rarely uses discounts, 1=Always seeks discounts)
+- Price preference range (1=Budget, 2=Regular, 3=Premium)
+- Discount sensitivity (0.0=Never uses discounts, 1.0=Always seeks discounts)
 - Luxury orientation (1=Basic products, 5=Luxury products)
 - Preferred category and brand
 
@@ -840,201 +840,119 @@ def create_named_clustered_dataset(clustered_data, cluster_names):
     
     return named_clusters
 
-def select_best_segment(cluster_data, product_info, discount_percent):
-    """Selects the best customer segment for the given product and discount."""
-    client = get_openai_client()
-    if not client:
-        return {
-            "cluster_name": "Error",
-            "match_score": 0,
-            "cluster_explanation": "OpenAI API key not available. Please check your configuration.",
-            "stats": {
-                "avg_spent": 0,
-                "avg_order": 0,
-                "top_brand": "N/A",
-                "top_category": "N/A"
-            }
-        }
-
-    # Create segment summaries
-    segments = {}
-    for cluster_name in cluster_data['cluster_name'].unique():
-        segment_data = cluster_data[cluster_data['cluster_name'] == cluster_name]
-        
-        # Calculate segment statistics
-        stats = {
-            'avg_spent': segment_data['total_spent'].mean(),
-            'avg_order': segment_data['avg_order_value'].mean(),
-            'top_brand': segment_data['top_brand'].mode().iloc[0],
-            'top_category': segment_data['top_category'].mode().iloc[0],
-            'avg_discount_sensitivity': segment_data['discount_sensitivity'].mean(),
-            'size': len(segment_data)
-        }
-        
-        segments[cluster_name] = {
-            'stats': stats,
-            'explanation': segment_data['cluster_explanation'].iloc[0]
-        }
-
-    # Prepare prompt for AI
-    prompt = f"""Analyze these customer segments for promoting this product:
-
-Product:
-- Name: {product_info['product_name']}
-- Category: {product_info['category']}
-- Brand: {product_info['brand']}
-- Price: €{product_info['retail_price']:.2f}
-- Discount: {discount_percent}%
-- Final Price: €{product_info['retail_price'] * (1 - discount_percent/100):.2f}
-
-Customer Segments:
-"""
-    
-    for name, data in segments.items():
-        prompt += f"""
-{name}:
-- Average Spent: €{data['stats']['avg_spent']:.2f}
-- Average Order: €{data['stats']['avg_order']:.2f}
-- Top Category: {data['stats']['top_category']}
-- Top Brand: {data['stats']['top_brand']}
-- Customers: {data['stats']['size']}
-- Profile: {data['explanation']}
-"""
-
-    prompt += """
-Select the best segment for this product promotion.
-Format your response exactly as:
-SEGMENT: [segment name]
-SCORE: [0-100]
-REASON: [1-2 sentences why this segment is best]
-"""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a marketing expert selecting customer segments for targeted promotions."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3
-        )
-
-        # Parse response
-        lines = response.choices[0].message.content.split('\n')
-        selected_name = lines[0].replace('SEGMENT:', '').strip()
-        score = int(lines[1].replace('SCORE:', '').strip())
-        reason = ' '.join(lines[2:]).replace('REASON:', '').strip()
-
-        # Get segment stats
-        selected_segment = segments[selected_name]
-
-        return {
-            "cluster_name": selected_name,
-            "match_score": score,
-            "cluster_explanation": reason,
-            "stats": selected_segment['stats']
-        }
-
-    except Exception as e:
-        st.error(f"Error selecting segment: {str(e)}")
-        return {
-            "cluster_name": "Error",
-            "match_score": 0,
-            "cluster_explanation": f"Error selecting segment: {str(e)}",
-            "stats": {
-                "avg_spent": 0,
-                "avg_order": 0,
-                "top_brand": "N/A",
-                "top_category": "N/A"
-            }
-        }
-
 def select_best_customers(cluster_data, cluster_name, product_info, discount_percent):
     """
-    Selects the best customers from given segment.
+    Selects the best customers from given segment based on multiple scoring criteria.
+    Each criterion contributes up to 20 points to the total score (max 100 points).
+    
     Args:
         cluster_data: DataFrame with cluster data
         cluster_name: Name of selected cluster
         product_info: Dictionary with product information
         discount_percent: Discount percentage
     Returns:
-        list: List of best customers with their scores
+        list: Top 5 best matching customers with their scores and reasons
     """
-    # Get customers from selected segment using cluster_name
+    # Get customers from selected segment
     cluster_customers = cluster_data[cluster_data['cluster_name'] == cluster_name].copy()
     
-    # Calculate customer scores
+    # Determine product price tier based on segment's average order value
+    avg_price = cluster_customers['avg_order_value'].mean()
+    if product_info['retail_price'] <= avg_price * 0.7:
+        product_price_tier = 1  # Budget tier
+    elif product_info['retail_price'] <= avg_price * 1.3:
+        product_price_tier = 2  # Regular tier
+    else:
+        product_price_tier = 3  # Premium tier
+    
+    # Calculate scores for each customer
     customer_scores = []
     for _, customer in cluster_customers.iterrows():
         score = 0
         reasons = []
         
-        # 1. Brand Affinity (25 points)
+        # 1. Brand Affinity Score (20 points)
+        # Evaluates customer's relationship with the product's brand
         brand_score = 0
         if customer['top_brand'] == product_info['brand']:
-            brand_score = 25
-            reasons.append("✓ Preferred Brand (+25 points)")
+            brand_score = 20
+            reasons.append("✓ Perfect Brand Match - Customer's Preferred Brand (+20 points)")
         elif product_info['brand'] in str(customer['brands_bought']):
-            brand_score = 12
-            reasons.append("✓ Previously Purchased Brand (+12 points)")
+            brand_score = 10
+            reasons.append("✓ Good Brand Match - Previously Purchased Brand (+10 points)")
         score += brand_score
         
-        # 2. Category Match (25 points)
+        # 2. Category Match Score (20 points)
+        # Evaluates customer's interest in the product category
         category_score = 0
         if customer['top_category'] == product_info['category']:
-            category_score = 25
-            reasons.append("✓ Preferred Category (+25 points)")
+            category_score = 20
+            reasons.append("✓ Perfect Category Match - Customer's Preferred Category (+20 points)")
         elif product_info['category'] in str(customer['categories_bought']):
-            category_score = 12
-            reasons.append("✓ Previously Purchased Category (+12 points)")
+            category_score = 10
+            reasons.append("✓ Good Category Match - Previously Purchased Category (+10 points)")
         score += category_score
         
-        # 3. Price Alignment (20 points)
+        # 3. Price Preference Score (20 points)
+        # Matches customer's price preference (1=Budget, 2=Regular, 3=Premium) with product tier
         price_score = 0
-        discounted_price = product_info['retail_price'] * (1 - discount_percent/100)
-        price_ratio = discounted_price / customer['avg_order_value']
-        if 0.8 <= price_ratio <= 1.2:
+        customer_price_pref = customer['price_preference_range']
+        if customer_price_pref == product_price_tier:
             price_score = 20
-            reasons.append("✓ Price Matches Usual Purchases (+20 points)")
-        elif 0.5 <= price_ratio <= 1.5:
+            reasons.append("✓ Perfect Price Range Match - Exact Price Tier Match (+20 points)")
+        elif abs(customer_price_pref - product_price_tier) == 1:
             price_score = 10
-            reasons.append("✓ Price Within Acceptable Range (+10 points)")
+            reasons.append("✓ Good Price Range Match - Adjacent Price Tier (+10 points)")
         score += price_score
         
-        # 4. Discount Sensitivity Match (20 points)
+        # 4. Luxury Preference Score (20 points)
+        # Evaluates match between product tier and customer's luxury preference (1-5 scale)
+        luxury_score = 0
+        if product_price_tier == 3:  # Premium product
+            if customer['luxury_preference_score'] >= 4:
+                luxury_score = 20
+                reasons.append("✓ Perfect Premium Match - High Luxury Preference (+20 points)")
+            elif customer['luxury_preference_score'] >= 3:
+                luxury_score = 10
+                reasons.append("✓ Good Premium Match - Medium-High Luxury Preference (+10 points)")
+        elif product_price_tier == 2:  # Regular product
+            if 2 <= customer['luxury_preference_score'] <= 4:
+                luxury_score = 20
+                reasons.append("✓ Perfect Regular Match - Balanced Luxury Preference (+20 points)")
+            else:
+                luxury_score = 10
+                reasons.append("✓ Acceptable Regular Match - Mixed Luxury Preference (+10 points)")
+        else:  # Budget product
+            if customer['luxury_preference_score'] <= 2:
+                luxury_score = 20
+                reasons.append("✓ Perfect Budget Match - Value-Oriented Preference (+20 points)")
+            elif customer['luxury_preference_score'] <= 3:
+                luxury_score = 10
+                reasons.append("✓ Good Budget Match - Budget-Leaning Preference (+10 points)")
+        score += luxury_score
+        
+        # 5. Discount Sensitivity Score (20 points)
+        # Evaluates match between discount size and customer's discount sensitivity (0.0-1.0)
         discount_score = 0
         sensitivity = customer['discount_sensitivity']
         
-        # High discount (>20%) - prefer discount-sensitive customers
-        if discount_percent > 20:
-            if sensitivity >= 7:
+        if discount_percent > 20:  # High discount
+            if sensitivity >= 0.7:  # High sensitivity (0.7-1.0)
                 discount_score = 20
-                reasons.append("✓ High Discount Sensitivity for Large Discount (+20 points)")
-            elif sensitivity >= 5:
+                reasons.append("✓ Perfect Discount Match - High Sensitivity for Large Discount (+20 points)")
+            elif sensitivity >= 0.5:  # Medium sensitivity (0.5-0.7)
                 discount_score = 10
-                reasons.append("✓ Medium Discount Sensitivity for Large Discount (+10 points)")
-        # Lower discount (<=20%) - prefer less sensitive customers
-        else:
-            if sensitivity <= 3:
+                reasons.append("✓ Good Discount Match - Medium Sensitivity for Large Discount (+10 points)")
+        else:  # Low discount
+            if sensitivity <= 0.3:  # Low sensitivity (0.0-0.3)
                 discount_score = 20
-                reasons.append("✓ Low Discount Sensitivity for Small Discount (+20 points)")
-            elif sensitivity <= 5:
+                reasons.append("✓ Perfect Discount Match - Low Sensitivity for Small Discount (+20 points)")
+            elif sensitivity <= 0.5:  # Medium sensitivity (0.3-0.5)
                 discount_score = 10
-                reasons.append("✓ Medium Discount Sensitivity for Small Discount (+10 points)")
+                reasons.append("✓ Good Discount Match - Medium-Low Sensitivity for Small Discount (+10 points)")
         score += discount_score
         
-        # 5. Customer Value & Activity (10 points)
-        value_score = 0
-        # High value customer
-        if customer['total_spent'] > cluster_customers['total_spent'].mean():
-            value_score += 5
-            reasons.append("✓ Above Average Spending in Segment (+5 points)")
-        # Recent activity
-        if customer['last_purchase_days_ago'] < 30:
-            value_score += 5
-            reasons.append("✓ Active Customer - Recent Purchase (+5 points)")
-        score += value_score
-        
+        # Store customer score and details
         customer_scores.append({
             'customer_id': customer['customer_id'],
             'score': score,
@@ -1044,12 +962,12 @@ def select_best_customers(cluster_data, cluster_name, product_info, discount_per
                 'brand': brand_score,
                 'category': category_score,
                 'price': price_score,
-                'discount': discount_score,
-                'value': value_score
+                'luxury': luxury_score,
+                'discount': discount_score
             }
         })
     
-    # Select top 5 matching customers
+    # Return top 5 best matching customers
     return sorted(customer_scores, key=lambda x: x['score'], reverse=True)[:5]
 
 def generate_promotional_email(product_info, customer_info, segment_info):
@@ -1171,4 +1089,123 @@ def send_promotional_email(config, subject, body, receiver_email):
         return True, "✅ Email sent successfully!"
     except Exception as e:
         return False, f"❌ Error sending email: {str(e)}"
+
+def select_best_segment(cluster_data, product_info, discount_percent):
+    """
+    Selects the best customer segment for the given product and discount using AI analysis.
+    
+    Args:
+        cluster_data: DataFrame with cluster data
+        product_info: Dictionary with product information
+        discount_percent: Discount percentage
+    Returns:
+        dict: Selected segment information with match score and explanation
+    """
+    client = get_openai_client()
+    if not client:
+        return {
+            "cluster_name": "Error",
+            "match_score": 0,
+            "cluster_explanation": "OpenAI API key not available. Please check your configuration.",
+            "stats": {
+                "avg_spent": 0,
+                "avg_order": 0,
+                "top_brand": "N/A",
+                "top_category": "N/A"
+            }
+        }
+
+    # Create segment summaries
+    segments = {}
+    for cluster_name in cluster_data['cluster_name'].unique():
+        segment_data = cluster_data[cluster_data['cluster_name'] == cluster_name]
+        
+        # Calculate segment statistics
+        stats = {
+            'avg_spent': segment_data['total_spent'].mean(),
+            'avg_order': segment_data['avg_order_value'].mean(),
+            'top_brand': segment_data['top_brand'].mode().iloc[0],
+            'top_category': segment_data['top_category'].mode().iloc[0],
+            'avg_discount_sensitivity': segment_data['discount_sensitivity'].mean(),
+            'size': len(segment_data)
+        }
+        
+        segments[cluster_name] = {
+            'stats': stats,
+            'explanation': segment_data['cluster_explanation'].iloc[0]
+        }
+
+    # Prepare prompt for AI
+    prompt = f"""Analyze these customer segments for promoting this product:
+
+Product:
+- Name: {product_info['product_name']}
+- Category: {product_info['category']}
+- Brand: {product_info['brand']}
+- Price: €{product_info['retail_price']:.2f}
+- Discount: {discount_percent}%
+- Final Price: €{product_info['retail_price'] * (1 - discount_percent/100):.2f}
+
+Customer Segments:
+"""
+    
+    for name, data in segments.items():
+        prompt += f"""
+{name}:
+- Average Spent: €{data['stats']['avg_spent']:.2f}
+- Average Order: €{data['stats']['avg_order']:.2f}
+- Top Category: {data['stats']['top_category']}
+- Top Brand: {data['stats']['top_brand']}
+- Discount Sensitivity: {data['stats']['avg_discount_sensitivity']:.2f} (0.0=Low, 1.0=High)
+- Customers: {data['stats']['size']}
+- Profile: {data['explanation']}
+"""
+
+    prompt += """
+Select the best segment for this product promotion.
+Format your response exactly as:
+SEGMENT: [segment name]
+SCORE: [0-100]
+REASON: [1-2 sentences why this segment is best]
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a marketing expert selecting customer segments for targeted promotions."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+
+        # Parse response
+        lines = response.choices[0].message.content.split('\n')
+        selected_name = lines[0].replace('SEGMENT:', '').strip()
+        score = int(lines[1].replace('SCORE:', '').strip())
+        reason = ' '.join(lines[2:]).replace('REASON:', '').strip()
+
+        # Get segment stats
+        selected_segment = segments[selected_name]
+
+        return {
+            "cluster_name": selected_name,
+            "match_score": score,
+            "cluster_explanation": reason,
+            "stats": selected_segment['stats']
+        }
+
+    except Exception as e:
+        st.error(f"Error selecting segment: {str(e)}")
+        return {
+            "cluster_name": "Error",
+            "match_score": 0,
+            "cluster_explanation": f"Error selecting segment: {str(e)}",
+            "stats": {
+                "avg_spent": 0,
+                "avg_order": 0,
+                "top_brand": "N/A",
+                "top_category": "N/A"
+            }
+        }
     
