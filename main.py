@@ -120,7 +120,7 @@ CLUSTERING_COLUMNS = ['price_preference_range', 'discount_sensitivity', 'luxury_
 
 menu_selection = st.sidebar.radio(
     "Navigation",
-    ["Business Logic", "Instructions", "Data", "Clustering", "Inventory & Customer Selection", "Email Design"],
+    ["Business Logic", "Data", "Clustering", "Inventory & Customer Selection", "Email Design"],
     key="menu_selection"
 )
 
@@ -136,43 +136,7 @@ if menu_selection == "Business Logic":
         st.write("Current working directory:", os.getcwd())
         st.write("File path:", os.path.abspath("BUSINESS_LOGIC_EN.md"))
 
-if menu_selection == "Instructions":
-    st.title("📚 User Guide")
-    st.write("Welcome to the Customer Data Analysis Tool!")
-    
-    # Application Goal section
-    application_goal_content = load_template("application-goal")
-    st.markdown(create_section(
-        "APPLICATION GOAL",
-        application_goal_content,
-        "🎯"
-    ), unsafe_allow_html=True)
-    
-    # Workflow section
-    workflow_content = load_template("workflow")
-    st.markdown(create_section(
-        "WORKFLOW",
-        workflow_content,
-        "📋"
-    ), unsafe_allow_html=True)
-    
-    # Getting Started section
-    getting_started_content = load_template("getting-started")
-    st.markdown(create_section(
-        "GETTING STARTED",
-        getting_started_content,
-        "🚀"
-    ), unsafe_allow_html=True)
-    
-    # Navigation button
-    st.markdown("<br>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([2, 1, 2])
-    with col2:
-        if st.button("Start with Data Section ➡️", type="primary", use_container_width=True):
-            st.session_state['go_to_data'] = True
-            st.rerun()
-
-elif menu_selection == "Data":
+if menu_selection == "Data":
     st.title("📊 Customer Data Analysis")
 
     # Load Data section
