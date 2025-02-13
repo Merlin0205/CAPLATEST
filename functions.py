@@ -395,7 +395,7 @@ JUSTIFICATION:
                 {"role": "system", "content": "You are an expert in analyzing clustering metrics. Provide clear and concise recommendations."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3
+            temperature=0.1
         )
         
         return response.choices[0].message.content
@@ -456,7 +456,7 @@ def evaluate_clusters_with_ai(features, labels, metrics):
                 {"role": "system", "content": "You are a data science expert specializing in customer segmentation."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3
+            temperature=0.1
         )
         
         print("Successfully received response from OpenAI")
@@ -683,7 +683,7 @@ def evaluate_cluster_validation(distance_matrix, features, n_clusters):
                 },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3
+            temperature=0.1
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -790,7 +790,7 @@ def get_cluster_names_from_ai(data):
             {"role": "system", "content": "You are a customer segmentation expert. Provide concise and descriptive cluster names with clear explanations."},
             {"role": "user", "content": prompt}
         ],
-        temperature=0.5
+        temperature=0.2
     )
     
     # Parse response
@@ -916,7 +916,7 @@ REASON: [1-2 sentences why this segment is best]
                 {"role": "system", "content": "You are a marketing expert selecting customer segments for targeted promotions."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3
+            temperature=0.1
         )
 
         # Parse response
