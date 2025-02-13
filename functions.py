@@ -390,7 +390,7 @@ JUSTIFICATION:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are an expert in analyzing clustering metrics. Provide clear and concise recommendations."},
                 {"role": "user", "content": prompt}
@@ -451,7 +451,7 @@ def evaluate_clusters_with_ai(features, labels, metrics):
         print("Sending request to OpenAI API...")
         # Call OpenAI API
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are a data science expert specializing in customer segmentation."},
                 {"role": "user", "content": prompt}
@@ -675,7 +675,7 @@ def evaluate_cluster_validation(distance_matrix, features, n_clusters):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
                 {
                     "role": "system", 
@@ -785,7 +785,7 @@ def get_cluster_names_from_ai(data):
     
     # Get response from OpenAI
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": "You are a customer segmentation expert. Provide concise and descriptive cluster names with clear explanations."},
             {"role": "user", "content": prompt}
@@ -911,7 +911,7 @@ REASON: [1-2 sentences why this segment is best]
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are a marketing expert selecting customer segments for targeted promotions."},
                 {"role": "user", "content": prompt}
@@ -1127,7 +1127,7 @@ SUBJECT: Your subject line here
 BODY: Your HTML formatted email body here"""
 
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": "You are a world-class email marketing designer and copywriter. Create stunning, highly personalized promotional emails that convert. Use modern design principles and persuasive writing techniques."},
             {"role": "user", "content": prompt}
